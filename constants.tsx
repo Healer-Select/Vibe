@@ -11,10 +11,10 @@ export const COLORS = [
 ];
 
 export const PRESET_PATTERNS: VibePattern[] = [
-  { id: 'p1', name: 'Heartbeat', emoji: '❤️', data: [200, 100, 200, 600, 200, 100, 200], isPreset: true },
-  { id: 'p2', name: 'SOS', emoji: '🆘', data: [200, 200, 200, 200, 200, 500, 500, 200, 500, 200, 500, 500, 200, 200, 200, 200, 200], isPreset: true },
-  { id: 'p3', name: 'Calm', emoji: '🌊', data: [1200, 500, 1200], isPreset: true },
-  { id: 'p4', name: 'Nudge', emoji: '👊', data: [150, 100, 150, 100, 150], isPreset: true }
+  { id: 'p1', name: 'Heartbeat', emoji: '❤️', data: [350, 180, 350, 800, 350, 180, 350], isPreset: true },
+  { id: 'p2', name: 'SOS', emoji: '🆘', data: [300, 100, 300, 100, 300, 400, 600, 100, 600, 100, 600, 400, 300, 100, 300, 100, 300], isPreset: true },
+  { id: 'p3', name: 'Calm', emoji: '🌊', data: [1800, 1000, 1800], isPreset: true },
+  { id: 'p4', name: 'Nudge', emoji: '👊', data: [250, 150, 250, 150, 250], isPreset: true }
 ];
 
 export const getRandomColor = () => {
@@ -25,6 +25,7 @@ export const getRandomColor = () => {
 
 export const triggerHaptic = (pattern: number | number[]) => {
   if ('vibrate' in navigator) {
+    // Longer durations feel "stronger" on mobile motors
     navigator.vibrate(pattern);
   }
 };

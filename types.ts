@@ -13,18 +13,20 @@ export interface VibeSignal {
   id: string;
   senderId: string;
   senderName: string;
+  senderEmoji?: string;
   type: VibeType;
-  count?: number; // For tap vibes
-  duration?: number; // For hold vibes (ms)
-  patternName?: string; // For pattern vibes
-  patternEmoji?: string; // For pattern vibes
-  patternData?: number[]; // For pattern vibes
+  count?: number;
+  duration?: number;
+  patternName?: string;
+  patternEmoji?: string;
+  patternData?: number[];
   timestamp: number;
 }
 
 export interface Contact {
   id: string;
   name: string;
+  emoji: string;
   pairCode: string;
   color: string;
 }

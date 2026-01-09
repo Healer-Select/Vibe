@@ -1,14 +1,14 @@
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 
-// Register Service Worker for PWA (Only works on HTTPS/Localhost)
+// Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
+    // Vite will serve files from the root in production
+    navigator.serviceWorker.register('/sw.js')
       .then(reg => console.log('Vibe ServiceWorker ready'))
-      .catch(err => console.log('PWA features disabled in this environment'));
+      .catch(err => console.log('PWA features disabled:', err));
   });
 }
 
