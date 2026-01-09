@@ -11,10 +11,10 @@ export const COLORS = [
 ];
 
 export const PRESET_PATTERNS: VibePattern[] = [
-  { id: 'p1', name: 'Heartbeat', emoji: '❤️', data: [400, 200, 400, 900, 400, 200, 400], isPreset: true },
-  { id: 'p2', name: 'SOS', emoji: '🆘', data: [350, 150, 350, 150, 350, 500, 700, 150, 700, 150, 700, 500, 350, 150, 350, 150, 350], isPreset: true },
-  { id: 'p3', name: 'Calm', emoji: '🌊', data: [2200, 1200, 2200], isPreset: true },
-  { id: 'p4', name: 'Nudge', emoji: '👊', data: [300, 200, 300, 200, 300], isPreset: true }
+  { id: 'p1', name: 'Heartbeat', emoji: '❤️', data: [200, 100, 200, 600, 200, 100, 200], isPreset: true },
+  { id: 'p2', name: 'SOS', emoji: '🆘', data: [200, 200, 200, 200, 200, 500, 500, 200, 500, 200, 500, 500, 200, 200, 200, 200, 200], isPreset: true },
+  { id: 'p3', name: 'Calm', emoji: '🌊', data: [1200, 500, 1200], isPreset: true },
+  { id: 'p4', name: 'Nudge', emoji: '👊', data: [150, 100, 150, 100, 150], isPreset: true }
 ];
 
 export const getRandomColor = () => {
@@ -25,8 +25,6 @@ export const getRandomColor = () => {
 
 export const triggerHaptic = (pattern: number | number[]) => {
   if ('vibrate' in navigator) {
-    // Note: Browsers ignore vibrating patterns if not triggered by user interaction
-    // UNLESS the app is installed/standalone in some environments.
     navigator.vibrate(pattern);
   }
 };

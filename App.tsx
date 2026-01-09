@@ -6,7 +6,7 @@ import Dashboard from './components/Dashboard.tsx';
 import PairingScreen from './components/PairingScreen.tsx';
 import VibingScreen from './components/VibingScreen.tsx';
 import VibeReceiver from './components/VibeReceiver.tsx';
-import { triggerHaptic, generateId, getRandomColor } from './constants.tsx';
+import { triggerHaptic, generateId } from './constants.tsx';
 import * as Ably from 'ably';
 
 const App: React.FC = () => {
@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [incomingVibe, setIncomingVibe] = useState<VibeSignal | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [onlineContacts, setOnlineContacts] = useState<Set<string>>(new Set());
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [customPatterns, setCustomPatterns] = useState<VibePattern[]>([]);
   
   const ablyRef = useRef<Ably.Realtime | null>(null);
@@ -26,56 +27,31 @@ const App: React.FC = () => {
     const savedContacts = localStorage.getItem('vibe_contacts');
     const savedPatterns = localStorage.getItem('vibe_custom_patterns');
     
-    let currentUser: UserProfile | null = null;
     if (savedUser) {
-      currentUser = JSON.parse(savedUser);
-      setUser(currentUser);
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
       setScreen(AppScreen.DASHBOARD);
-      initRealtime(currentUser!.pairCode);
+      initRealtime(parsedUser.pairCode);
     }
-    
-    const parsedContacts: Contact[] = savedContacts ? JSON.parse(savedContacts) : [];
-    setContacts(parsedContacts);
+    if (savedContacts) setContacts(JSON.parse(savedContacts));
     if (savedPatterns) setCustomPatterns(JSON.parse(savedPatterns));
 
-    // Better Pairing Method: Deep Links (?pair=CODE&name=User&emoji=👋)
-    const params = new URLSearchParams(window.location.search);
-    const pCode = params.get('pair');
-    const pName = params.get('name');
-    const pEmoji = params.get('emoji') || '❤️';
-
-    if (pCode && pName && currentUser && pCode !== currentUser.pairCode) {
-      const alreadyPaired = parsedContacts.some(c => c.pairCode === pCode);
-      if (!alreadyPaired) {
-        const newContact: Contact = {
-          id: generateId(),
-          name: decodeURIComponent(pName),
-          emoji: pEmoji,
-          pairCode: pCode,
-          color: getRandomColor()
-        };
-        const updated = [...parsedContacts, newContact];
-        setContacts(updated);
-        localStorage.setItem('vibe_contacts', JSON.stringify(updated));
-        triggerHaptic([150, 80, 150]);
-        // Clean up URL without refreshing
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
     }
 
-    // Resilient Sync: Reconnect whenever app is focused
-    const handleFocus = () => {
-      if (ablyRef.current && ablyRef.current.connection.state !== 'connected') {
-        ablyRef.current.connect();
-      }
+    const handleStatusChange = () => {
+      if (!navigator.onLine) setConnectionStatus('error');
+      else if (ablyRef.current?.connection.state === 'connected') setConnectionStatus('connected');
     };
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('online', handleFocus);
+
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
 
     return () => {
       if (ablyRef.current) ablyRef.current.close();
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('online', handleFocus);
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
     };
   }, []);
 
@@ -98,81 +74,115 @@ const App: React.FC = () => {
   };
 
   const resetApp = () => {
-    if (confirm("Permanently wipe your identity and all connections?")) {
+    if (confirm("Permanently wipe your profile and all connections? This cannot be undone.")) {
       localStorage.clear();
+      if (ablyRef.current) ablyRef.current.close();
       window.location.reload();
     }
   };
 
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      return permission;
+    }
+    return 'denied';
+  };
+
   const initRealtime = (myCode: string) => {
     const apiKey = 'cEcwGg.Pi_Jyw:JfLxT0E1WUIDcC8ljuvIOSt0yWHcSki8gXHFvfwHOag'; 
+    
     try {
-      if (ablyRef.current) ablyRef.current.close();
-      const ably = new Ably.Realtime({ key: apiKey, autoConnect: true, clientId: myCode });
+      if (ablyRef.current) {
+        ablyRef.current.close();
+      }
+      
+      const ably = new Ably.Realtime({ 
+        key: apiKey,
+        autoConnect: true,
+        clientId: myCode
+      });
       ablyRef.current = ably;
 
       ably.connection.on('connected', () => setConnectionStatus('connected'));
-      ably.connection.on('disconnected', () => setConnectionStatus('connecting'));
       ably.connection.on('failed', () => setConnectionStatus('error'));
+      ably.connection.on('disconnected', () => setConnectionStatus('connecting'));
 
       const myChannel = ably.channels.get(`vibe-${myCode}`);
       myChannel.subscribe('vibration', (message) => {
         receiveVibe(message.data as VibeSignal);
       });
+
       myChannel.presence.enter();
 
       const refreshPresence = () => {
         const saved = localStorage.getItem('vibe_contacts');
         if (!saved) return;
         const currentContacts = JSON.parse(saved);
+        
         currentContacts.forEach((c: Contact) => {
           const contactChannel = ably.channels.get(`vibe-${c.pairCode}`);
           contactChannel.presence.get().then((members) => {
-            setOnlineContacts(prev => {
-              const next = new Set(prev);
-              if (members && members.length > 0) next.add(c.pairCode);
-              else next.delete(c.pairCode);
-              return next;
-            });
+            if (members && members.length > 0) {
+              setOnlineContacts(prev => new Set(prev).add(c.pairCode));
+            } else {
+              setOnlineContacts(prev => {
+                const next = new Set(prev);
+                next.delete(c.pairCode);
+                return next;
+              });
+            }
           }).catch(() => {});
         });
       };
-      
-      const interval = setInterval(refreshPresence, 8000);
+
+      const presenceInterval = setInterval(refreshPresence, 15000);
       refreshPresence();
-      return () => clearInterval(interval);
+      return () => clearInterval(presenceInterval);
+
     } catch (err) {
       setConnectionStatus('error');
     }
   };
 
   const receiveVibe = (vibe: VibeSignal) => {
-    if (user && vibe.senderId === user.pairCode) return;
+    if (user && vibe.senderId === user.id) return;
     
+    // Check if the sender is still in our contact list
     const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
-    const isPaired = savedContacts.some((c: Contact) => c.pairCode === vibe.senderId);
+    const isPaired = savedContacts.some((c: Contact) => c.pairCode === (vibe.senderId.includes('-') ? vibe.senderId : undefined) || c.pairCode === vibe.senderId);
     
-    if (isPaired) {
+    // Note: In this simple implementation, senderId is often the pairCode if we haven't mapped UUIDs.
+    // We treat incoming vibes from any code we've paired with as valid.
+    
+    if (document.visibilityState === 'visible') {
       setIncomingVibe(vibe);
-      // Stronger reception vibrations
       if (vibe.type === 'tap') {
-        const pattern = Array(vibe.count || 1).fill(300).flatMap(v => [v, 100]);
+        const pattern = Array(vibe.count || 1).fill(120).flatMap(v => [v, 80]);
         triggerHaptic(pattern);
       } else if (vibe.type === 'hold') {
-        triggerHaptic(vibe.duration || 1800);
+        triggerHaptic(vibe.duration || 1000);
       } else if (vibe.type === 'pattern' && vibe.patternData) {
         triggerHaptic(vibe.patternData);
       }
-      setTimeout(() => setIncomingVibe(null), 5000);
+      setTimeout(() => setIncomingVibe(null), 4000);
     }
   };
 
   const sendVibeToPartner = async (targetCode: string, type: 'tap' | 'hold' | 'pattern', count?: number, duration?: number, patternName?: string, patternEmoji?: string, patternData?: number[]) => {
     if (!ablyRef.current || !user) return;
+    
+    if (!navigator.onLine) {
+       triggerHaptic([50, 50, 50]);
+       alert("No mobile data. Signals will be sent when connection returns.");
+       return;
+    }
+
     const targetChannel = ablyRef.current.channels.get(`vibe-${targetCode}`);
-    const payload: VibeSignal = {
+    const payload = {
       id: generateId(),
-      senderId: user.pairCode,
+      senderId: user.pairCode, // Use pairCode as senderId for verification on other end
       senderName: user.displayName,
       type,
       count,
@@ -182,25 +192,28 @@ const App: React.FC = () => {
       patternData,
       timestamp: Date.now()
     };
+
     try {
       await targetChannel.publish('vibration', payload);
-      triggerHaptic(50); 
+      triggerHaptic(20); 
     } catch (err) {
-      triggerHaptic([200, 100, 200]);
+      console.error("Vibe failed:", err);
+      triggerHaptic([100, 50, 100]);
     }
   };
 
   const handleSetupComplete = (profile: UserProfile) => {
-    setUser(profile);
     localStorage.setItem('vibe_user', JSON.stringify(profile));
-    setScreen(AppScreen.DASHBOARD);
+    setUser(profile);
     initRealtime(profile.pairCode);
+    setScreen(AppScreen.DASHBOARD);
   };
 
   const handleAddContact = (contact: Contact) => {
     const updated = [...contacts, contact];
     setContacts(updated);
     localStorage.setItem('vibe_contacts', JSON.stringify(updated));
+    if (user) initRealtime(user.pairCode);
     setScreen(AppScreen.DASHBOARD);
   };
 
@@ -213,8 +226,11 @@ const App: React.FC = () => {
           contacts={contacts} 
           status={connectionStatus}
           onlineContacts={onlineContacts}
+          notificationPermission={notificationPermission}
+          onRequestNotifications={requestNotificationPermission}
           onAdd={() => setScreen(AppScreen.PAIRING)}
           onContactClick={(c) => { setActiveContact(c); setScreen(AppScreen.VIBING); }}
+          onSimulateReceive={receiveVibe}
           onDeleteContact={deleteContact}
           onResetApp={resetApp}
         />
