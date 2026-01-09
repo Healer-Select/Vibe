@@ -1,5 +1,5 @@
 
-import { Contact } from './types';
+import { VibePattern } from './types';
 
 export const COLORS = [
   'bg-rose-500',
@@ -8,6 +8,13 @@ export const COLORS = [
   'bg-amber-500',
   'bg-sky-500',
   'bg-fuchsia-500'
+];
+
+export const PRESET_PATTERNS: VibePattern[] = [
+  { id: 'p1', name: 'Heartbeat', data: [100, 50, 100, 400, 100, 50, 100], isPreset: true },
+  { id: 'p2', name: 'SOS', data: [100, 100, 100, 100, 100, 300, 300, 100, 300, 100, 300, 300, 100, 100, 100, 100, 100], isPreset: true },
+  { id: 'p3', name: 'Calm', data: [800, 400, 800], isPreset: true },
+  { id: 'p4', name: 'Nudge', data: [50, 50, 50, 50, 50, 50, 50], isPreset: true }
 ];
 
 export const getRandomColor = () => {
@@ -39,7 +46,6 @@ export const generateId = () => {
   return Array.from(array, dec => dec.toString(16).padStart(2, '0')).join('');
 };
 
-// Input Sanitization helper
 export const sanitizeInput = (input: string) => {
   return input.replace(/[^a-zA-Z0-9\s]/g, '').trim();
 };

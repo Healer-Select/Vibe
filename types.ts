@@ -1,5 +1,12 @@
 
-export type VibeType = 'tap' | 'hold';
+export type VibeType = 'tap' | 'hold' | 'pattern';
+
+export interface VibePattern {
+  id: string;
+  name: string;
+  data: number[];
+  isPreset?: boolean;
+}
 
 export interface VibeSignal {
   id: string;
@@ -8,6 +15,8 @@ export interface VibeSignal {
   type: VibeType;
   count?: number; // For tap vibes
   duration?: number; // For hold vibes (ms)
+  patternName?: string; // For pattern vibes
+  patternData?: number[]; // For pattern vibes
   timestamp: number;
 }
 

@@ -32,6 +32,8 @@ const VibeReceiver: React.FC<Props> = ({ vibe }) => {
           <p className="text-zinc-400 text-xs">
             {vibe.type === 'tap' 
               ? `Sent ${vibe.count} light ${vibe.count === 1 ? 'tap' : 'taps'}`
+              : vibe.type === 'pattern'
+              ? `Sent "${vibe.patternName}" pattern`
               : `Sent a long, warm hold`}
           </p>
         </div>
