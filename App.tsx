@@ -38,18 +38,18 @@ const App: React.FC = () => {
     setContacts(parsedContacts);
     if (savedPatterns) setCustomPatterns(JSON.parse(savedPatterns));
 
-    // Handle Deep Link Pairing: ?pair=CODE&name=User&emoji=👋
+    // Better Pairing Method: Deep Links (?pair=CODE&name=User&emoji=👋)
     const params = new URLSearchParams(window.location.search);
     const pCode = params.get('pair');
     const pName = params.get('name');
     const pEmoji = params.get('emoji') || '❤️';
 
     if (pCode && pName && currentUser && pCode !== currentUser.pairCode) {
-      const exists = parsedContacts.some(c => c.pairCode === pCode);
-      if (!exists) {
+      const alreadyPaired = parsedContacts.some(c => c.pairCode === pCode);
+      if (!alreadyPaired) {
         const newContact: Contact = {
           id: generateId(),
-          name: pName,
+          name: decodeURIComponent(pName),
           emoji: pEmoji,
           pairCode: pCode,
           color: getRandomColor()
@@ -57,20 +57,26 @@ const App: React.FC = () => {
         const updated = [...parsedContacts, newContact];
         setContacts(updated);
         localStorage.setItem('vibe_contacts', JSON.stringify(updated));
-        triggerHaptic([100, 50, 100]);
-        // Clean URL
+        triggerHaptic([150, 80, 150]);
+        // Clean up URL without refreshing
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
 
-    // Auto-reconnect on focus
+    // Resilient Sync: Reconnect whenever app is focused
     const handleFocus = () => {
       if (ablyRef.current && ablyRef.current.connection.state !== 'connected') {
         ablyRef.current.connect();
       }
     };
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    window.addEventListener('online', handleFocus);
+
+    return () => {
+      if (ablyRef.current) ablyRef.current.close();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleFocus);
+    };
   }, []);
 
   const saveCustomPattern = (pattern: VibePattern) => {
@@ -92,7 +98,7 @@ const App: React.FC = () => {
   };
 
   const resetApp = () => {
-    if (confirm("Reset Vibe? All pairings will be lost.")) {
+    if (confirm("Permanently wipe your identity and all connections?")) {
       localStorage.clear();
       window.location.reload();
     }
@@ -143,21 +149,21 @@ const App: React.FC = () => {
   const receiveVibe = (vibe: VibeSignal) => {
     if (user && vibe.senderId === user.pairCode) return;
     
-    // Only accept vibes from people we have paired with
     const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
     const isPaired = savedContacts.some((c: Contact) => c.pairCode === vibe.senderId);
     
     if (isPaired) {
       setIncomingVibe(vibe);
+      // Stronger reception vibrations
       if (vibe.type === 'tap') {
-        const pattern = Array(vibe.count || 1).fill(250).flatMap(v => [v, 120]);
+        const pattern = Array(vibe.count || 1).fill(300).flatMap(v => [v, 100]);
         triggerHaptic(pattern);
       } else if (vibe.type === 'hold') {
-        triggerHaptic(vibe.duration || 1500);
+        triggerHaptic(vibe.duration || 1800);
       } else if (vibe.type === 'pattern' && vibe.patternData) {
         triggerHaptic(vibe.patternData);
       }
-      setTimeout(() => setIncomingVibe(null), 4500);
+      setTimeout(() => setIncomingVibe(null), 5000);
     }
   };
 
@@ -178,13 +184,12 @@ const App: React.FC = () => {
     };
     try {
       await targetChannel.publish('vibration', payload);
-      triggerHaptic(40); 
+      triggerHaptic(50); 
     } catch (err) {
-      triggerHaptic([150, 50, 150]);
+      triggerHaptic([200, 100, 200]);
     }
   };
 
-  // Add handleSetupComplete to fix "Cannot find name 'handleSetupComplete'"
   const handleSetupComplete = (profile: UserProfile) => {
     setUser(profile);
     localStorage.setItem('vibe_user', JSON.stringify(profile));
@@ -192,7 +197,6 @@ const App: React.FC = () => {
     initRealtime(profile.pairCode);
   };
 
-  // Add handleAddContact to fix "Cannot find name 'handleAddContact'"
   const handleAddContact = (contact: Contact) => {
     const updated = [...contacts, contact];
     setContacts(updated);
