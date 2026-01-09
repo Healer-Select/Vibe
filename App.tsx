@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { AppScreen, UserProfile, Contact, VibeSignal } from './types.ts';
 import SetupScreen from './components/SetupScreen.tsx';
@@ -7,7 +6,7 @@ import PairingScreen from './components/PairingScreen.tsx';
 import VibingScreen from './components/VibingScreen.tsx';
 import VibeReceiver from './components/VibeReceiver.tsx';
 import { triggerHaptic, generateId } from './constants.tsx';
-import * as Ably from 'https://esm.sh/ably';
+import * as Ably from 'ably';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<AppScreen>(AppScreen.SETUP);
@@ -46,23 +45,22 @@ const App: React.FC = () => {
       ably.connection.on('connected', () => setConnectionStatus('connected'));
       ably.connection.on('failed', () => setConnectionStatus('error'));
 
-      // 1. Subscribe to my own vibes
       const myChannel = ably.channels.get(`vibe-${myCode}`);
       myChannel.subscribe('vibration', (message) => {
         receiveVibe(message.data as VibeSignal);
       });
 
-      // 2. Presence: Mark myself as online on my own channel
       myChannel.presence.enter();
 
-      // 3. Track presence for all contacts
       const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
       savedContacts.forEach((c: Contact) => {
         const contactChannel = ably.channels.get(`vibe-${c.pairCode}`);
         
         const updatePresence = () => {
-          contactChannel.presence.get((err, members) => {
-            if (!err && members && members.length > 0) {
+          // Fix: Ably v2+ presence.get() returns a Promise and expects RealtimePresenceParams as optional first arg.
+          // Using .then() resolves the signature mismatch error.
+          contactChannel.presence.get().then((members) => {
+            if (members && members.length > 0) {
               setOnlineContacts(prev => new Set(prev).add(c.pairCode));
             } else {
               setOnlineContacts(prev => {
@@ -71,12 +69,14 @@ const App: React.FC = () => {
                 return next;
               });
             }
+          }).catch(err => {
+            console.error('Error fetching presence:', err);
           });
         };
 
         contactChannel.presence.subscribe('enter', updatePresence);
         contactChannel.presence.subscribe('leave', updatePresence);
-        updatePresence(); // Initial check
+        updatePresence();
       });
 
     } catch (err) {
@@ -121,7 +121,6 @@ const App: React.FC = () => {
     const updated = [...contacts, contact];
     setContacts(updated);
     localStorage.setItem('vibe_contacts', JSON.stringify(updated));
-    // Restart realtime to track new contact presence
     if (user) initRealtime(user.pairCode);
     setScreen(AppScreen.DASHBOARD);
   };
