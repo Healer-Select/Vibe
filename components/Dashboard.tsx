@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Contact } from '../types.ts';
-import { Plus, User, Share2, Activity, Settings, Trash2, X, Smartphone, Copy } from 'lucide-react';
-// Added missing import for triggerHaptic
+import { Plus, User, Activity, Settings, Trash2, X, Smartphone, Copy, Heart } from 'lucide-react';
 import { triggerHaptic } from '../constants.tsx';
 
 interface Props {
@@ -29,7 +28,7 @@ const Dashboard: React.FC<Props> = ({
   const copyCode = () => {
     navigator.clipboard.writeText(user.pairCode);
     triggerHaptic(50);
-    alert("Pairing code copied!");
+    alert("Your pairing code is copied!");
   };
 
   return (
@@ -45,7 +44,7 @@ const Dashboard: React.FC<Props> = ({
           <div>
             <h1 className="text-xl font-outfit font-semibold">{user.displayName}</h1>
             <p className="text-[9px] uppercase tracking-widest text-zinc-500 font-black">
-              {status === 'connected' ? 'Screen Awake Active' : 'Connecting...'}
+              {status === 'connected' ? 'Screen Sync Active' : 'Connecting...'}
             </p>
           </div>
         </div>
@@ -54,28 +53,42 @@ const Dashboard: React.FC<Props> = ({
         </button>
       </header>
 
-      {/* Simple PWA Instruction Line */}
+      {/* Subtle PWA Instruction Line */}
       {!isStandalone && (
         <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center space-x-3 backdrop-blur-sm">
           <Smartphone size={16} className="text-rose-500 shrink-0" />
           <p className="text-[10px] text-zinc-400 leading-tight">
-            Best experience: <span className="text-zinc-200 font-bold">Add to Home Screen</span> to stay awake and feel vibrations when away.
+            Add to Home Screen to keep the app <span className="text-zinc-200 font-bold">awake</span> and feel vibrations when away.
           </p>
         </div>
       )}
 
-      <div className="flex-1 space-y-4 overflow-y-auto pb-32 no-scrollbar">
+      <div className="flex-1 flex flex-col space-y-4 overflow-y-auto pb-32 no-scrollbar">
         {contacts.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center space-y-6 text-center">
-             <div className="bg-zinc-900 w-20 h-20 rounded-[2.5rem] flex items-center justify-center border border-zinc-800">
-              <Activity size={32} className="text-zinc-700 animate-pulse" />
+          <div className="flex-1 flex flex-col items-center justify-center space-y-8 text-center pb-12">
+             <div className="relative group">
+                <div className="absolute -inset-4 bg-rose-500/20 rounded-full blur-2xl animate-pulse" />
+                <div className="bg-zinc-900 w-24 h-24 rounded-[2.5rem] flex items-center justify-center border border-zinc-800 relative z-10 shadow-inner">
+                  <Heart size={42} className="text-rose-500 fill-rose-500/10" />
+                </div>
+             </div>
+            
+            <div className="space-y-2">
+                <h2 className="text-2xl font-outfit font-semibold text-white px-4 leading-tight">Pair with someone to connect</h2>
+                <p className="text-zinc-500 text-sm max-w-[240px] mx-auto">Your private code is <span className="text-rose-500 font-mono font-bold select-all tracking-wider">{user.pairCode}</span></p>
             </div>
-            <div className="space-y-1">
-                <p className="text-zinc-200 font-semibold text-lg">Your code is <span className="text-rose-500 font-mono select-all">{user.pairCode}</span></p>
-                <p className="text-zinc-500 text-xs px-8">Give this code to someone you love so they can pair with you.</p>
-            </div>
-            <button onClick={copyCode} className="bg-zinc-900 text-zinc-300 border border-zinc-800 px-8 py-4 rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all">
-                <Copy size={18} /> Copy My Code
+
+            <button 
+              onClick={onAdd} 
+              className="group relative bg-rose-600 text-white px-10 py-6 rounded-[2rem] font-bold flex flex-col items-center gap-1 active:scale-95 transition-all shadow-2xl shadow-rose-900/30 overflow-hidden"
+            >
+                <div className="absolute inset-0 bg-gradient-to-tr from-rose-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="text-lg">Share Your Feelings</span>
+                <span className="text-[10px] uppercase tracking-widest text-rose-100 opacity-60">Enter a code to begin</span>
+            </button>
+            
+            <button onClick={copyCode} className="text-zinc-500 text-xs flex items-center gap-2 hover:text-zinc-300 transition-colors">
+              <Copy size={14} /> Copy my pairing code
             </button>
           </div>
         ) : (
@@ -101,7 +114,7 @@ const Dashboard: React.FC<Props> = ({
                       <div className="flex items-center space-x-2 mt-1">
                         <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-zinc-700'}`} />
                         <p className={`text-[10px] uppercase tracking-widest font-black ${isOnline ? 'text-emerald-500' : 'text-zinc-600'}`}>
-                          {isOnline ? 'Active Sync' : 'Offline'}
+                          {isOnline ? 'Pulse Connected' : 'Away'}
                         </p>
                       </div>
                     </div>
@@ -122,18 +135,18 @@ const Dashboard: React.FC<Props> = ({
       {showSettings && (
         <div className="fixed inset-0 z-[100] bg-zinc-950/98 backdrop-blur-3xl animate-in fade-in duration-300 p-8 flex flex-col">
           <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl font-outfit font-semibold text-white">Vibe Settings</h2>
+            <h2 className="text-3xl font-outfit font-semibold text-white">Profile</h2>
             <button onClick={() => setShowSettings(false)} className="p-2 text-zinc-500"><X size={36} /></button>
           </div>
           <div className="flex-1 space-y-10">
-            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[2.5rem] space-y-6">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[2.5rem] space-y-6 shadow-xl">
                <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-[10px] uppercase font-black text-zinc-600 tracking-widest mb-1">Your Identity</p>
+                    <p className="text-[10px] uppercase font-black text-zinc-600 tracking-widest mb-1">Display Name</p>
                     <p className="text-2xl font-semibold">{user.displayName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] uppercase font-black text-zinc-600 tracking-widest mb-1">Pairing Code</p>
+                    <p className="text-[10px] uppercase font-black text-zinc-600 tracking-widest mb-1">Your Code</p>
                     <p className="text-2xl font-mono font-bold text-rose-500 tracking-wider">{user.pairCode}</p>
                   </div>
                </div>
@@ -144,21 +157,23 @@ const Dashboard: React.FC<Props> = ({
             </div>
             
             <button onClick={onResetApp} className="w-full p-6 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-[2.5rem] font-bold flex items-center justify-between">
-                <span>Reset Application</span>
+                <span>Reset Vibe Identity</span>
                 <Trash2 size={20} />
             </button>
           </div>
         </div>
       )}
 
-      <footer className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none">
-        <div className="max-w-md mx-auto pointer-events-auto">
-          <button onClick={onAdd} className="bg-rose-600 w-full h-18 rounded-[2rem] active:scale-95 transition-all flex items-center justify-center space-x-3 shadow-2xl shadow-rose-900/30">
-            <Plus size={24} className="text-white" />
-            <span className="font-bold text-sm uppercase tracking-widest">Pair with Someone</span>
-          </button>
-        </div>
-      </footer>
+      {contacts.length > 0 && (
+        <footer className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pointer-events-none">
+          <div className="max-w-md mx-auto pointer-events-auto">
+            <button onClick={onAdd} className="bg-zinc-900 border border-white/10 w-full h-18 rounded-[2rem] active:scale-95 transition-all flex items-center justify-center space-x-3 shadow-2xl">
+              <Plus size={24} className="text-rose-500" />
+              <span className="font-bold text-sm uppercase tracking-widest text-zinc-200">Pair Someone Else</span>
+            </button>
+          </div>
+        </footer>
+      )}
     </div>
   );
 };

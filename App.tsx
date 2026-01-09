@@ -6,7 +6,7 @@ import Dashboard from './components/Dashboard.tsx';
 import PairingScreen from './components/PairingScreen.tsx';
 import VibingScreen from './components/VibingScreen.tsx';
 import VibeReceiver from './components/VibeReceiver.tsx';
-import { triggerHaptic, generateId, getRandomColor } from './constants.tsx';
+import { triggerHaptic, generateId } from './constants.tsx';
 import * as Ably from 'ably';
 
 const App: React.FC = () => {
@@ -22,21 +22,20 @@ const App: React.FC = () => {
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const wakeLockRef = useRef<any>(null);
 
-  // Screen Wake Lock API to prevent the phone from sleeping
+  // Robust Screen Wake Lock implementation
   const requestWakeLock = async () => {
     if ('wakeLock' in navigator && contacts.length > 0) {
       try {
-        // Only request if not already held
         if (!wakeLockRef.current) {
           wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-          console.log('Vibe: Staying awake while paired...');
+          console.log('Vibe: Syncing while awake...');
           
           wakeLockRef.current.addEventListener('release', () => {
             wakeLockRef.current = null;
           });
         }
       } catch (err) {
-        console.warn('Vibe: Could not stay awake:', err);
+        console.warn('Vibe: WakeLock failed:', err);
       }
     }
   };
@@ -57,7 +56,7 @@ const App: React.FC = () => {
     setContacts(parsedContacts);
     if (savedPatterns) setCustomPatterns(JSON.parse(savedPatterns));
 
-    // Handle re-requesting wake lock when app returns from background
+    // Handle re-requesting wake lock when app returns to focus
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         requestWakeLock();
@@ -93,7 +92,7 @@ const App: React.FC = () => {
   };
 
   const resetApp = () => {
-    if (confirm("Reset Vibe? All your pairings and identity will be removed.")) {
+    if (confirm("Permanently reset your identity? This will unpair all current connections.")) {
       localStorage.clear();
       window.location.reload();
     }
