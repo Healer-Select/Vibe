@@ -40,8 +40,18 @@ const App: React.FC = () => {
       setNotificationPermission(Notification.permission);
     }
 
+    const handleStatusChange = () => {
+      if (!navigator.onLine) setConnectionStatus('error');
+      else if (ablyRef.current?.connection.state === 'connected') setConnectionStatus('connected');
+    };
+
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
+
     return () => {
       if (ablyRef.current) ablyRef.current.close();
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
     };
   }, []);
 
@@ -64,14 +74,10 @@ const App: React.FC = () => {
   };
 
   const resetApp = () => {
-    if (confirm("This will delete your profile and all pairings. Are you sure?")) {
-      localStorage.removeItem('vibe_user');
-      localStorage.removeItem('vibe_contacts');
-      localStorage.removeItem('vibe_custom_patterns');
+    if (confirm("Permanently wipe your profile and all connections? This cannot be undone.")) {
+      localStorage.clear();
       if (ablyRef.current) ablyRef.current.close();
-      setUser(null);
-      setContacts([]);
-      setScreen(AppScreen.SETUP);
+      window.location.reload();
     }
   };
 
@@ -88,13 +94,14 @@ const App: React.FC = () => {
     const apiKey = 'cEcwGg.Pi_Jyw:JfLxT0E1WUIDcC8ljuvIOSt0yWHcSki8gXHFvfwHOag'; 
     
     try {
-      if (ablyRef.current) ablyRef.current.close();
+      if (ablyRef.current) {
+        ablyRef.current.close();
+      }
       
-      // Fix: Removed invalid 'recover: true'. In Ably SDK, 'recover' should be a recovery key string or a callback.
-      // Basic session resumption is handled by the SDK when possible without manual recovery keys.
       const ably = new Ably.Realtime({ 
         key: apiKey,
-        autoConnect: true
+        autoConnect: true,
+        clientId: myCode
       });
       ablyRef.current = ably;
 
@@ -110,7 +117,10 @@ const App: React.FC = () => {
       myChannel.presence.enter();
 
       const refreshPresence = () => {
-        const currentContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
+        const saved = localStorage.getItem('vibe_contacts');
+        if (!saved) return;
+        const currentContacts = JSON.parse(saved);
+        
         currentContacts.forEach((c: Contact) => {
           const contactChannel = ably.channels.get(`vibe-${c.pairCode}`);
           contactChannel.presence.get().then((members) => {
@@ -123,14 +133,12 @@ const App: React.FC = () => {
                 return next;
               });
             }
-          });
+          }).catch(() => {});
         });
       };
 
-      // Poll presence every 30s as a backup to events
-      const presenceInterval = setInterval(refreshPresence, 30000);
+      const presenceInterval = setInterval(refreshPresence, 15000);
       refreshPresence();
-
       return () => clearInterval(presenceInterval);
 
     } catch (err) {
@@ -141,10 +149,17 @@ const App: React.FC = () => {
   const receiveVibe = (vibe: VibeSignal) => {
     if (user && vibe.senderId === user.id) return;
     
+    // Check if the sender is still in our contact list
+    const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
+    const isPaired = savedContacts.some((c: Contact) => c.pairCode === (vibe.senderId.includes('-') ? vibe.senderId : undefined) || c.pairCode === vibe.senderId);
+    
+    // Note: In this simple implementation, senderId is often the pairCode if we haven't mapped UUIDs.
+    // We treat incoming vibes from any code we've paired with as valid.
+    
     if (document.visibilityState === 'visible') {
       setIncomingVibe(vibe);
       if (vibe.type === 'tap') {
-        const pattern = Array(vibe.count || 1).fill(80).flatMap(v => [v, 60]);
+        const pattern = Array(vibe.count || 1).fill(120).flatMap(v => [v, 80]);
         triggerHaptic(pattern);
       } else if (vibe.type === 'hold') {
         triggerHaptic(vibe.duration || 1000);
@@ -155,45 +170,36 @@ const App: React.FC = () => {
     }
   };
 
-  const sendVibeToPartner = (targetCode: string, type: 'tap' | 'hold' | 'pattern', count?: number, duration?: number, patternName?: string, patternData?: number[]) => {
+  const sendVibeToPartner = async (targetCode: string, type: 'tap' | 'hold' | 'pattern', count?: number, duration?: number, patternName?: string, patternEmoji?: string, patternData?: number[]) => {
     if (!ablyRef.current || !user) return;
     
-    // Check for internet connection
     if (!navigator.onLine) {
-       alert("You are currently offline. Vibe will send when connection returns.");
+       triggerHaptic([50, 50, 50]);
+       alert("No mobile data. Signals will be sent when connection returns.");
+       return;
     }
 
     const targetChannel = ablyRef.current.channels.get(`vibe-${targetCode}`);
-    
     const payload = {
       id: generateId(),
-      senderId: user.id,
+      senderId: user.pairCode, // Use pairCode as senderId for verification on other end
       senderName: user.displayName,
       type,
       count,
       duration,
       patternName,
+      patternEmoji,
       patternData,
       timestamp: Date.now()
     };
 
-    targetChannel.publish({
-      name: 'vibration',
-      data: payload,
-      extras: {
-        push: {
-          notification: {
-            title: `❤️ Vibe from ${user.displayName}`,
-            body: type === 'tap' 
-              ? `Sent ${count} pulse${count === 1 ? '' : 's'}`
-              : type === 'pattern' 
-              ? `Sent the "${patternName}" pattern`
-              : `Holding you close...`,
-          },
-          data: payload
-        }
-      }
-    });
+    try {
+      await targetChannel.publish('vibration', payload);
+      triggerHaptic(20); 
+    } catch (err) {
+      console.error("Vibe failed:", err);
+      triggerHaptic([100, 50, 100]);
+    }
   };
 
   const handleSetupComplete = (profile: UserProfile) => {
@@ -207,7 +213,6 @@ const App: React.FC = () => {
     const updated = [...contacts, contact];
     setContacts(updated);
     localStorage.setItem('vibe_contacts', JSON.stringify(updated));
-    // Immediately check presence for the new contact
     if (user) initRealtime(user.pairCode);
     setScreen(AppScreen.DASHBOARD);
   };
@@ -236,7 +241,9 @@ const App: React.FC = () => {
           contact={activeContact} 
           onBack={() => setScreen(AppScreen.DASHBOARD)}
           user={user}
-          onSendVibe={(type, count, dur, pName, pData) => sendVibeToPartner(activeContact.pairCode, type, count, dur, pName, pData)}
+          onSendVibe={(type, count, duration, pName, pEmoji, pData) => 
+            sendVibeToPartner(activeContact.pairCode, type, count, duration, pName, pEmoji, pData)
+          }
           customPatterns={customPatterns}
           onSavePattern={saveCustomPattern}
           onDeletePattern={deleteCustomPattern}

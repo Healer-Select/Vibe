@@ -11,10 +11,10 @@ export const COLORS = [
 ];
 
 export const PRESET_PATTERNS: VibePattern[] = [
-  { id: 'p1', name: 'Heartbeat', data: [100, 50, 100, 400, 100, 50, 100], isPreset: true },
-  { id: 'p2', name: 'SOS', data: [100, 100, 100, 100, 100, 300, 300, 100, 300, 100, 300, 300, 100, 100, 100, 100, 100], isPreset: true },
-  { id: 'p3', name: 'Calm', data: [800, 400, 800], isPreset: true },
-  { id: 'p4', name: 'Nudge', data: [50, 50, 50, 50, 50, 50, 50], isPreset: true }
+  { id: 'p1', name: 'Heartbeat', emoji: '❤️', data: [200, 100, 200, 600, 200, 100, 200], isPreset: true },
+  { id: 'p2', name: 'SOS', emoji: '🆘', data: [200, 200, 200, 200, 200, 500, 500, 200, 500, 200, 500, 500, 200, 200, 200, 200, 200], isPreset: true },
+  { id: 'p3', name: 'Calm', emoji: '🌊', data: [1200, 500, 1200], isPreset: true },
+  { id: 'p4', name: 'Nudge', emoji: '👊', data: [150, 100, 150, 100, 150], isPreset: true }
 ];
 
 export const getRandomColor = () => {
@@ -30,7 +30,7 @@ export const triggerHaptic = (pattern: number | number[]) => {
 };
 
 export const generatePairCode = () => {
-  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No O, 0, I, 1 for clarity
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
   const values = new Uint32Array(6);
   window.crypto.getRandomValues(values);
@@ -47,5 +47,5 @@ export const generateId = () => {
 };
 
 export const sanitizeInput = (input: string) => {
-  return input.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  return input.replace(/[^a-zA-Z0-9\s\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, '').trim();
 };
