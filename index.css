@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* @tailwind directives removed as we use the CDN script in index.html */
 
 :root {
   --safe-top: env(safe-area-inset-top);
