@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeType, VibePattern } from '../types.ts';
-import { ChevronLeft, Heart, Plus, Trash2, X, CircleDot, Loader2, Smile } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile } from 'lucide-react';
 import { triggerHaptic, PRESET_PATTERNS, generateId } from '../constants.tsx';
 
 interface Props {
@@ -142,7 +142,7 @@ const VibingScreen: React.FC<Props> = ({
         </button>
       </header>
 
-      {/* Pattern Selector Tray with Emojis */}
+      {/* Pattern Selector Tray */}
       <div className="flex space-x-2 overflow-x-auto pb-4 pt-2 no-scrollbar z-10">
         {allPatterns.map(pattern => (
           <div key={pattern.id} className="relative group shrink-0">

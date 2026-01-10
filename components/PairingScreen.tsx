@@ -22,6 +22,7 @@ const PairingScreen: React.FC<Props> = ({ onBack, onAdd }) => {
     if (cleanCode.length !== 6 || !cleanName) return;
 
     setIsVerifying(true);
+    // Simulating network verification for UX
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     onAdd({
@@ -52,11 +53,11 @@ const PairingScreen: React.FC<Props> = ({ onBack, onAdd }) => {
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ENTER CODE"
+              placeholder="ENTER 6-DIGIT CODE"
               maxLength={6}
               className="w-full bg-zinc-900 border-zinc-800 border rounded-2xl px-5 py-5 text-2xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-rose-500/50 text-rose-500 disabled:opacity-50"
             />
-            <p className="text-xs text-zinc-600 px-1">Verification adds a layer of safety.</p>
+            <p className="text-xs text-zinc-600 px-1">Ask your partner for their code from their dashboard.</p>
           </div>
 
           <div className="space-y-2">

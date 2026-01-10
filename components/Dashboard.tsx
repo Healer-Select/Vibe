@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Contact } from '../types.ts';
-import { Plus, User, Activity, Settings, Trash2, X, Smartphone, Copy, Heart } from 'lucide-react';
+import { Plus, User, Settings, Trash2, X, Smartphone, Copy, Heart, Bell } from 'lucide-react';
 import { triggerHaptic } from '../constants.tsx';
 
 interface Props {
@@ -20,15 +19,29 @@ const Dashboard: React.FC<Props> = ({
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [notificationPerm, setNotificationPerm] = useState<NotificationPermission>('default');
 
   useEffect(() => {
     setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone);
+    if ('Notification' in window) {
+      setNotificationPerm(Notification.permission);
+    }
   }, []);
 
   const copyCode = () => {
     navigator.clipboard.writeText(user.pairCode);
     triggerHaptic(50);
-    alert("Your pairing code is copied!");
+    alert("Pairing code copied to clipboard!");
+  };
+
+  const requestNotifications = () => {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then((perm) => {
+      setNotificationPerm(perm);
+      if (perm === 'granted') {
+        new Notification("Notifications Enabled", { body: "You will now know when a Vibe arrives." });
+      }
+    });
   };
 
   return (
@@ -53,12 +66,12 @@ const Dashboard: React.FC<Props> = ({
         </button>
       </header>
 
-      {/* Subtle PWA Instruction Line */}
+      {/* Subtle PWA Instruction Line - Only shows if not installed */}
       {!isStandalone && (
         <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center space-x-3 backdrop-blur-sm">
           <Smartphone size={16} className="text-rose-500 shrink-0" />
           <p className="text-[10px] text-zinc-400 leading-tight">
-            Add to Home Screen to keep the app <span className="text-zinc-200 font-bold">awake</span> and feel vibrations when away.
+            For best results, <span className="text-zinc-200 font-bold">Add to Home Screen</span> to keep the app awake and receiving vibes.
           </p>
         </div>
       )}
@@ -155,6 +168,17 @@ const Dashboard: React.FC<Props> = ({
                   <Copy size={20} /> Copy Pairing Code
                </button>
             </div>
+
+            {/* Notification Permission Button */}
+            {notificationPerm !== 'granted' && (
+              <button onClick={requestNotifications} className="w-full p-6 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-[2.5rem] font-bold flex items-center justify-between hover:bg-zinc-800 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Bell size={20} className="text-emerald-500" />
+                    <span>Enable Notifications</span>
+                  </div>
+                  <span className="text-xs uppercase bg-zinc-800 px-2 py-1 rounded-lg text-zinc-500">Enable</span>
+              </button>
+            )}
             
             <button onClick={onResetApp} className="w-full p-6 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-[2.5rem] font-bold flex items-center justify-between">
                 <span>Reset Vibe Identity</span>

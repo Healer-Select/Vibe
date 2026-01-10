@@ -27,12 +27,14 @@ export interface Contact {
   name: string;
   pairCode: string;
   color: string;
+  fcmToken?: string; // Added for Push Notifications
 }
 
 export interface UserProfile {
   id: string;
   displayName: string;
   pairCode: string;
+  fcmToken?: string; // Added for Push Notifications
 }
 
 export enum AppScreen {

@@ -1,44 +1,71 @@
-
 import React, { useEffect, useState } from 'react';
-import { VibeSignal } from '../types.ts';
+import { VibeSignal, Contact } from '../types.ts';
 import { Heart } from 'lucide-react';
 
 interface Props {
   vibe: VibeSignal;
+  contacts: Contact[];
 }
 
-const VibeReceiver: React.FC<Props> = ({ vibe }) => {
+const VibeReceiver: React.FC<Props> = ({ vibe, contacts }) => {
   const [visible, setVisible] = useState(false);
+  
+  // Find sender to get their color
+  const sender = contacts.find(c => c.pairCode === vibe.senderId);
+  // Default to rose if not found, extract the color name (e.g., 'rose', 'emerald') from the class
+  const colorClass = sender ? sender.color : 'bg-rose-500';
+  const colorName = colorClass.replace('bg-', '').replace('-500', '');
 
   useEffect(() => {
     setVisible(true);
-    const timer = setTimeout(() => setVisible(false), 4500);
+    // Longer visibility for immersive effect
+    const timer = setTimeout(() => setVisible(false), 5000);
     return () => clearTimeout(timer);
   }, [vibe]);
 
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-x-0 top-12 flex justify-center z-[150] px-6 pointer-events-none animate-in fade-in slide-in-from-top-10 duration-500">
-      <div className="bg-zinc-900/95 backdrop-blur-2xl border border-white/10 px-6 py-4 rounded-[2.5rem] shadow-3xl flex items-center space-x-4 max-w-sm w-full">
+    <div 
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center animate-in fade-in duration-700"
+      onClick={() => setVisible(false)}
+    >
+      {/* Ambient Background Layer */}
+      <div className={`absolute inset-0 ${colorClass} opacity-20 backdrop-blur-3xl`} />
+      
+      {/* Pulsing Core Layer */}
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+        <div className={`w-[150vw] h-[150vw] ${colorClass} rounded-full blur-[120px] opacity-20 animate-pulse`} style={{ animationDuration: '3s' }} />
+        <div className={`absolute w-96 h-96 ${colorClass} rounded-full blur-[80px] opacity-30 animate-ping`} style={{ animationDuration: '4s' }} />
+      </div>
+
+      {/* Content Layer */}
+      <div className="relative z-10 flex flex-col items-center text-center space-y-8 p-8">
         <div className="relative">
-          <div className="absolute inset-0 bg-rose-500 rounded-full blur-md opacity-50 animate-pulse" />
-          <div className="relative w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-xl">
-            {vibe.type === 'pattern' && vibe.patternEmoji ? (
-              <span className="animate-bounce">{vibe.patternEmoji}</span>
-            ) : (
-              <Heart size={24} className="text-white fill-white animate-bounce" />
-            )}
-          </div>
+           {/* Ripple Effect */}
+           <div className={`absolute -inset-12 ${colorClass} opacity-30 rounded-full animate-ping`} style={{ animationDuration: '1.5s' }} />
+           <div className={`absolute -inset-20 ${colorClass} opacity-20 rounded-full animate-pulse`} />
+           
+           {/* Main Icon */}
+           <div className={`w-32 h-32 rounded-full ${colorClass} flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.5)] border-4 border-white/10 backdrop-blur-md`}>
+              {vibe.type === 'pattern' && vibe.patternEmoji ? (
+                <span className="text-6xl animate-bounce">{vibe.patternEmoji}</span>
+              ) : (
+                <Heart size={64} className="text-white fill-white animate-bounce" />
+              )}
+           </div>
         </div>
-        <div className="flex-1">
-          <h4 className="text-zinc-100 font-semibold font-outfit text-base">{vibe.senderName}</h4>
-          <p className="text-zinc-400 text-[11px] leading-tight">
+
+        <div className="space-y-2 max-w-xs">
+          <h2 className="text-4xl font-outfit font-bold text-white drop-shadow-xl tracking-tight">
+            {vibe.senderName}
+          </h2>
+          <p className="text-white/80 text-lg font-medium uppercase tracking-widest drop-shadow-md">
             {vibe.type === 'tap' 
-              ? `Sent ${vibe.count} intense ${vibe.count === 1 ? 'tap' : 'taps'}`
+              ? 'is thinking of you'
               : vibe.type === 'pattern'
-              ? `Sent the "${vibe.patternName}" vibe`
-              : `Sent a long, deep hold`}
+              ? `sent ${vibe.patternName}`
+              : 'is holding you close'}
           </p>
         </div>
       </div>

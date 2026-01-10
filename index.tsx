@@ -3,13 +3,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 
-// Register Service Worker for PWA
+// Register Service Worker for PWA with relative path handling
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Use relative path for sw.js to prevent 404 errors
     navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('Vibe ServiceWorker ready'))
-      .catch(err => console.log('PWA features disabled:', err));
+      .then(reg => console.log('Vibe ServiceWorker registered'))
+      .catch(err => console.log('ServiceWorker registration failed:', err));
   });
 }
 

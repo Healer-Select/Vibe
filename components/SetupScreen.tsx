@@ -46,7 +46,7 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
               className="w-full bg-zinc-900 border-zinc-800 border rounded-2xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-rose-500/50 transition-all text-zinc-100"
             />
             <p className="text-[10px] text-zinc-600 mt-3 px-1">
-              Use letters and numbers only.
+              This is how you'll appear to your partners.
             </p>
           </div>
 

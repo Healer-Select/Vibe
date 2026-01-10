@@ -25,7 +25,11 @@ export const getRandomColor = () => {
 
 export const triggerHaptic = (pattern: number | number[]) => {
   if ('vibrate' in navigator) {
-    navigator.vibrate(pattern);
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) {
+      console.warn('Haptic feedback failed', e);
+    }
   }
 };
 
