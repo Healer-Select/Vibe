@@ -7,6 +7,16 @@ export default defineConfig({
   base: './', 
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 1000, // Silence warnings for vendor chunks under 1MB
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-utils': ['lucide-react', 'ably'],
+          'vendor-firebase': ['firebase/app', 'firebase/messaging', 'firebase/analytics']
+        }
+      }
+    }
   },
   server: {
     port: 3000,
