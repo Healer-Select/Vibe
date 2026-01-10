@@ -1,5 +1,6 @@
+
 import React, { useEffect, useState } from 'react';
-import { VibeSignal, Contact } from '../types.ts';
+import { VibeSignal, Contact } from '../types';
 import { Heart } from 'lucide-react';
 
 interface Props {

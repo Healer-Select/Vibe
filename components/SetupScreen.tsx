@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { UserProfile } from '../types.ts';
-import { generateId, generatePairCode, sanitizeInput } from '../constants.tsx';
+import { UserProfile } from '../types';
+import { generateId, generatePairCode, sanitizeInput } from '../constants';
 import { Loader2 } from 'lucide-react';
 
 interface Props {

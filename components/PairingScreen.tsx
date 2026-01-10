@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Contact } from '../types.ts';
+import { Contact } from '../types';
 import { ChevronLeft, Check, Loader2 } from 'lucide-react';
-import { generateId, getRandomColor, sanitizeInput } from '../constants.tsx';
+import { generateId, getRandomColor, sanitizeInput } from '../constants';
 
 interface Props {
   onBack: () => void;

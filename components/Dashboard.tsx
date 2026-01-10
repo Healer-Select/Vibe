@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { UserProfile, Contact } from '../types.ts';
+import { UserProfile, Contact } from '../types';
 import { Plus, User, Settings, Trash2, X, Smartphone, Copy, Heart, Bell } from 'lucide-react';
-import { triggerHaptic } from '../constants.tsx';
+import { triggerHaptic } from '../constants';
 
 interface Props {
   user: UserProfile;

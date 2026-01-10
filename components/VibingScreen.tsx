@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Contact, UserProfile, VibeType, VibePattern } from '../types.ts';
+import { Contact, UserProfile, VibeType, VibePattern } from '../types';
 import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile } from 'lucide-react';
-import { triggerHaptic, PRESET_PATTERNS, generateId } from '../constants.tsx';
+import { triggerHaptic, PRESET_PATTERNS, generateId } from '../constants';
 
 interface Props {
   contact: Contact;
