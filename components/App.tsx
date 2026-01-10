@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { AppScreen, UserProfile, Contact, VibeSignal, VibePattern } from './types.ts';
 import SetupScreen from './components/SetupScreen.tsx';
@@ -40,30 +41,29 @@ const App: React.FC = () => {
   useEffect(() => {
     // 1. Initialize App & Notifications
     const initApp = async () => {
-      // Get FCM Token
-      let fcmToken: string | undefined;
-      try {
-        const token = await requestForToken();
-        if (token) fcmToken = token;
-      } catch (e) {
-        console.warn("FCM Token fetch failed", e);
-      }
-
       // Load Local Storage
       const savedUser = localStorage.getItem('vibe_user');
       const savedContacts = localStorage.getItem('vibe_contacts');
       const savedPatterns = localStorage.getItem('vibe_custom_patterns');
       
-      if (savedUser) {
-        const currentUser = JSON.parse(savedUser);
-        // Update user profile with new token if it changed
-        if (fcmToken && currentUser.fcmToken !== fcmToken) {
-           currentUser.fcmToken = fcmToken;
+      let currentUser = savedUser ? JSON.parse(savedUser) : null;
+
+      // Background: Try to refresh FCM Token
+      requestForToken().then((token) => {
+        if (token && currentUser && currentUser.fcmToken !== token) {
+           currentUser.fcmToken = token;
+           setUser(currentUser);
            localStorage.setItem('vibe_user', JSON.stringify(currentUser));
+           // Re-init realtime to broadcast new token
+           initRealtime(currentUser.pairCode, token);
         }
+      }).catch(err => console.warn("Token background fetch failed", err));
+      
+      if (currentUser) {
         setUser(currentUser);
         setScreen(AppScreen.DASHBOARD);
-        initRealtime(currentUser.pairCode, fcmToken);
+        // Init with existing token if we have one, or undefined
+        initRealtime(currentUser.pairCode, currentUser.fcmToken);
       }
       
       const parsedContacts = savedContacts ? JSON.parse(savedContacts) : [];
@@ -142,6 +142,7 @@ const App: React.FC = () => {
       });
 
       // Enter presence to announce I am online (and share my FCM Token)
+      // We pass the token in the presence data so contacts can grab it
       myChannel.presence.enter({ fcmToken: myToken });
 
       // Poll other contacts to see if they are online and get their tokens
@@ -261,14 +262,28 @@ const App: React.FC = () => {
   };
 
   const handleSetupComplete = async (profile: UserProfile) => {
-    // Try to attach token if available
-    const token = await requestForToken();
-    if (token) profile.fcmToken = token;
-
+    // 1. IMMEDIATE UI UPDATE (Don't wait for network)
     setUser(profile);
     localStorage.setItem('vibe_user', JSON.stringify(profile));
     setScreen(AppScreen.DASHBOARD);
-    initRealtime(profile.pairCode, token || undefined);
+
+    // 2. BACKGROUND: Connect to Realtime & Request Token
+    try {
+      // Initialize realtime immediately (even without token) to get online status
+      initRealtime(profile.pairCode, undefined);
+      
+      // Try to get token in background
+      const token = await requestForToken();
+      if (token) {
+        // If we got a token, update the profile and re-init realtime
+        const updatedProfile = { ...profile, fcmToken: token };
+        setUser(updatedProfile);
+        localStorage.setItem('vibe_user', JSON.stringify(updatedProfile));
+        initRealtime(profile.pairCode, token);
+      }
+    } catch (e) {
+      console.warn("Background setup failed", e);
+    }
   };
 
   const handleAddContact = (contact: Contact) => {

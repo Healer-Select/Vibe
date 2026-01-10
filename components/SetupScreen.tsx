@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types.ts';
 import { generateId, generatePairCode, sanitizeInput } from '../constants.tsx';
+import { Loader2 } from 'lucide-react';
 
 interface Props {
   onComplete: (profile: UserProfile) => void;
@@ -9,6 +10,7 @@ interface Props {
 
 const SetupScreen: React.FC<Props> = ({ onComplete }) => {
   const [name, setName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,11 +18,16 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
     
     if (!cleanName || cleanName.length < 2) return;
 
-    onComplete({
-      id: generateId(),
-      displayName: cleanName.substring(0, 20),
-      pairCode: generatePairCode()
-    });
+    setIsLoading(true);
+    
+    // Slight delay for UX so it doesn't feel jerky
+    setTimeout(() => {
+        onComplete({
+        id: generateId(),
+        displayName: cleanName.substring(0, 20),
+        pairCode: generatePairCode()
+        });
+    }, 500);
   };
 
   return (
@@ -41,9 +48,10 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
               type="text"
               maxLength={20}
               value={name}
+              disabled={isLoading}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Alex"
-              className="w-full bg-zinc-900 border-zinc-800 border rounded-2xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-rose-500/50 transition-all text-zinc-100"
+              className="w-full bg-zinc-900 border-zinc-800 border rounded-2xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-rose-500/50 transition-all text-zinc-100 disabled:opacity-50"
             />
             <p className="text-[10px] text-zinc-600 mt-3 px-1">
               This is how you'll appear to your partners.
@@ -52,10 +60,10 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
 
           <button
             type="submit"
-            disabled={name.trim().length < 2}
-            className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-2xl shadow-lg shadow-rose-900/20 transition-all active:scale-[0.98]"
+            disabled={name.trim().length < 2 || isLoading}
+            className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-2xl shadow-lg shadow-rose-900/20 transition-all active:scale-[0.98] flex items-center justify-center"
           >
-            Get Started
+            {isLoading ? <Loader2 className="animate-spin" /> : 'Get Started'}
           </button>
         </form>
       </div>
