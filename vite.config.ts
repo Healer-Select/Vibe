@@ -8,11 +8,8 @@ export default defineConfig({
   base: './', 
   build: {
     outDir: 'dist',
-    rollupOptions: {
-      input: {
-        main: './index.html',
-      },
-    },
+    // Removed explicit rollupOptions input to fix "Could not resolve entry module" error.
+    // Vite automatically finds index.html in the root.
   },
   server: {
     port: 3000,

@@ -1,8 +1,9 @@
 // Import Firebase libraries for Service Worker
-importScripts('https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/11.0.1/firebase-messaging-compat.js');
+// Using v10.14.1 to align with package.json ^10.8.0
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'vibe-v14';
+const CACHE_NAME = 'vibe-v15';
 const ASSETS = [
   './',
   './index.html',
