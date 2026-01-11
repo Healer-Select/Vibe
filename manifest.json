@@ -2,7 +2,7 @@
   "name": "Vibe",
   "short_name": "Vibe",
   "description": "Replace words with touch.",
-  "start_url": "./index.html",
+  "start_url": "https://vibe-healers-projects-823c4aaf.vercel.app/",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",

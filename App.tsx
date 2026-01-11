@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AppScreen, UserProfile, Contact, VibeSignal, VibePattern } from './types';
+import { AppScreen, UserProfile, Contact, VibeSignal, VibePattern, VibeType } from './types';
 import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import PairingScreen from './components/PairingScreen';
 import VibingScreen from './components/VibingScreen';
 import VibeReceiver from './components/VibeReceiver';
-import { triggerHaptic, generateId } from './constants';
+import ChatScreen from './components/ChatScreen';
+import { triggerHaptic, generateId, encryptMessage } from './constants';
 import * as Ably from 'ably';
 import { requestForToken, onMessageListener } from './src/firebase';
 
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [incomingVibe, setIncomingVibe] = useState<VibeSignal | null>(null);
+  const [incomingChatMessage, setIncomingChatMessage] = useState<VibeSignal | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [onlineContacts, setOnlineContacts] = useState<Set<string>>(new Set());
   const [customPatterns, setCustomPatterns] = useState<VibePattern[]>([]);
@@ -119,6 +121,13 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateUser = (newProfile: UserProfile) => {
+    setUser(newProfile);
+    localStorage.setItem('vibe_user', JSON.stringify(newProfile));
+    // Re-initialize Realtime with new code immediately
+    initRealtime(newProfile.pairCode, newProfile.fcmToken);
+  };
+
   const initRealtime = (myCode: string, myToken?: string) => {
     // Note: In production, use an auth URL instead of hardcoding the key
     const apiKey = 'cEcwGg.Pi_Jyw:JfLxT0E1WUIDcC8ljuvIOSt0yWHcSki8gXHFvfwHOag'; 
@@ -197,33 +206,54 @@ const App: React.FC = () => {
     const contact = savedContacts.find((c: Contact) => c.pairCode === vibe.senderId);
     
     if (contact) {
-      setIncomingVibe(vibe);
       
-      // 1. Trigger Haptics
-      if (vibe.type === 'tap') {
-        const pattern = Array(vibe.count || 1).fill(300).flatMap(v => [v, 120]);
-        triggerHaptic(pattern);
-      } else if (vibe.type === 'hold') {
-        triggerHaptic(vibe.duration || 1800);
-      } else if (vibe.type === 'pattern' && vibe.patternData) {
-        triggerHaptic(vibe.patternData);
+      // Handle Chat Messages Distinctly
+      if (vibe.type === 'chat') {
+          setIncomingChatMessage(vibe);
+          if (screen !== AppScreen.CHAT) {
+             triggerHaptic([50, 50]);
+          }
+      } 
+      // Handle specialized modes (Draw, Breathe, Heartbeat, Game) without full screen takeover if we are in Vibing
+      else if (['draw', 'breathe', 'heartbeat', 'game-matrix'].includes(vibe.type)) {
+          setIncomingVibe(vibe); // Pass to VibingScreen to render
+          
+          if (vibe.type === 'heartbeat') {
+              triggerHaptic([50, 100, 50]);
+          } else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') {
+              triggerHaptic([50, 50, 50, 50]); // Attention grabber for game
+          } else {
+              triggerHaptic(20);
+          }
+      }
+      // Standard Vibes (Tap, Hold, Pattern)
+      else {
+          setIncomingVibe(vibe);
+          
+          if (vibe.type === 'tap') {
+            const pattern = Array(vibe.count || 1).fill(300).flatMap(v => [v, 120]);
+            triggerHaptic(pattern.length > 0 ? pattern : 50);
+          } else if (vibe.type === 'hold') {
+            triggerHaptic(vibe.duration || 1800);
+          } else if (vibe.type === 'pattern' && vibe.patternData) {
+            triggerHaptic(vibe.patternData);
+          }
       }
 
       // 2. Trigger System Notification (Reliable PWA Method)
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
          const ICON_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Cpath d='m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E";
          
-         // Prioritize the custom text message if available
          let bodyText = '';
-         if (vibe.text) {
-             bodyText = vibe.text;
-         } else if (vibe.type === 'tap') {
-             bodyText = 'Sent you a tap.';
-         } else if (vibe.type === 'hold') {
-             bodyText = 'Is holding you.';
-         } else {
-             bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
-         }
+         if (vibe.type === 'chat') bodyText = "Sent you a secret message";
+         else if (vibe.type === 'heartbeat') bodyText = "Is sending their heartbeat";
+         else if (vibe.type === 'draw') bodyText = "Is drawing something for you";
+         else if (vibe.type === 'breathe') bodyText = "Wants to breathe with you";
+         else if (vibe.type === 'game-matrix') bodyText = "Invited you to play Matrix";
+         else if (vibe.text) bodyText = vibe.text;
+         else if (vibe.type === 'tap') bodyText = 'Sent you a tap.';
+         else if (vibe.type === 'hold') bodyText = 'Is holding you.';
+         else bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
 
          navigator.serviceWorker.ready.then(registration => {
              registration.showNotification(vibe.senderName, {
@@ -235,37 +265,59 @@ const App: React.FC = () => {
          });
       }
 
-      setTimeout(() => setIncomingVibe(null), 5000);
+      // Clear standard signals after 5s, but specialized modes might need different handling
+      if (vibe.type !== 'chat') {
+        setTimeout(() => setIncomingVibe(null), 5000);
+      }
     }
   };
 
   const sendVibeToPartner = async (
     targetCode: string, 
-    type: 'tap' | 'hold' | 'pattern', 
+    type: VibeType, 
     text?: string,
     count?: number, 
     duration?: number, 
     patternName?: string, 
     patternEmoji?: string, 
-    patternData?: number[]
+    patternData?: number[],
+    points?: {x: number, y: number}[],
+    color?: string,
+    breatheVariant?: 'calm' | 'meditation' | 'sad',
+    matrixAction?: 'invite' | 'select' | 'reveal' | 'reset',
+    gridDifficulty?: 'easy' | 'medium' | 'hard',
+    selectionIndex?: number
   ) => {
     if (!ablyRef.current || !user) return;
     
-    // Optimistic UI Haptic
-    triggerHaptic(40);
+    // Optimistic UI Haptic for simple signals (exclude continuous/drawing modes to avoid lag)
+    if (type === 'tap' || type === 'hold' || type === 'pattern') triggerHaptic(40);
 
     const targetChannel = ablyRef.current.channels.get(`vibe-${targetCode}`);
+    
+    let processedText = text;
+    // Encrypt if it's a chat
+    if (type === 'chat' && text) {
+        processedText = await encryptMessage(text, user.pairCode, targetCode);
+    }
+
     const payload: VibeSignal = {
       id: generateId(),
       senderId: user.pairCode,
       senderName: user.displayName,
       type,
-      text,
+      text: processedText,
       count,
       duration,
       patternName,
       patternEmoji,
       patternData,
+      points,
+      color,
+      breatheVariant,
+      matrixAction,
+      gridDifficulty,
+      selectionIndex,
       timestamp: Date.now()
     };
 
@@ -273,25 +325,19 @@ const App: React.FC = () => {
       await targetChannel.publish('vibration', payload);
     } catch (err) {
       // Error feedback
-      triggerHaptic([150, 100, 150]);
+      if (type !== 'chat') triggerHaptic([150, 100, 150]);
     }
   };
 
   const handleSetupComplete = async (profile: UserProfile) => {
-    // 1. IMMEDIATE UI UPDATE (Don't wait for network)
     setUser(profile);
     localStorage.setItem('vibe_user', JSON.stringify(profile));
     setScreen(AppScreen.DASHBOARD);
 
-    // 2. BACKGROUND: Connect to Realtime & Request Token
     try {
-      // Initialize realtime immediately (even without token) to get online status
       initRealtime(profile.pairCode, undefined);
-      
-      // Try to get token in background
       const token = await requestForToken();
       if (token) {
-        // If we got a token, update the profile and re-init realtime
         const updatedProfile = { ...profile, fcmToken: token };
         setUser(updatedProfile);
         localStorage.setItem('vibe_user', JSON.stringify(updatedProfile));
@@ -310,7 +356,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col no-select">
+    <div className="min-h-screen w-full flex flex-col no-select">
       {screen === AppScreen.SETUP && <SetupScreen onComplete={handleSetupComplete} />}
       {screen === AppScreen.DASHBOARD && user && (
         <Dashboard 
@@ -322,23 +368,43 @@ const App: React.FC = () => {
           onContactClick={(c) => { setActiveContact(c); setScreen(AppScreen.VIBING); }}
           onDeleteContact={deleteContact}
           onResetApp={resetApp}
+          onUpdateUser={handleUpdateUser}
         />
       )}
       {screen === AppScreen.PAIRING && <PairingScreen onBack={() => setScreen(AppScreen.DASHBOARD)} onAdd={handleAddContact} />}
+      
       {screen === AppScreen.VIBING && activeContact && user && (
         <VibingScreen 
           contact={activeContact} 
-          onBack={() => setScreen(AppScreen.DASHBOARD)}
           user={user}
-          onSendVibe={(type, text, count, duration, pName, pEmoji, pData) => 
-            sendVibeToPartner(activeContact.pairCode, type, text, count, duration, pName, pEmoji, pData)
+          onBack={() => setScreen(AppScreen.DASHBOARD)}
+          incomingVibe={incomingVibe}
+          onSendVibe={(type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx) => 
+            sendVibeToPartner(activeContact.pairCode, type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx)
           }
+          onOpenChat={() => setScreen(AppScreen.CHAT)}
           customPatterns={customPatterns}
           onSavePattern={saveCustomPattern}
           onDeletePattern={deleteCustomPattern}
         />
       )}
-      {incomingVibe && <VibeReceiver vibe={incomingVibe} contacts={contacts} />}
+
+      {screen === AppScreen.CHAT && activeContact && user && (
+        <ChatScreen 
+          contact={activeContact}
+          user={user}
+          onBack={() => setScreen(AppScreen.VIBING)}
+          onSendMessage={(text) => sendVibeToPartner(activeContact.pairCode, 'chat', text)}
+          incomingMessage={incomingChatMessage}
+        />
+      )}
+
+      {/* Only show VibeReceiver if we are NOT in the Vibing screen (because Vibing screen handles it internally now for immersion) 
+          OR if it is a standard message. 
+      */}
+      {incomingVibe && screen !== AppScreen.VIBING && (
+          <VibeReceiver vibe={incomingVibe} contacts={contacts} />
+      )}
     </div>
   );
 };

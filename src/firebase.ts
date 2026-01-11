@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { getAnalytics, Analytics } from 'firebase/analytics';
@@ -61,7 +62,10 @@ export const requestForToken = async () => {
 
 export const onMessageListener = () =>
   new Promise((resolve) => {
-    if (!messaging) return;
+    if (!messaging) {
+        resolve(null);
+        return;
+    }
     onMessage(messaging, (payload) => {
       resolve(payload);
     });

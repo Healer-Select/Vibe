@@ -1,5 +1,5 @@
 
-export type VibeType = 'tap' | 'hold' | 'pattern';
+export type VibeType = 'tap' | 'hold' | 'pattern' | 'chat' | 'heartbeat' | 'draw' | 'breathe' | 'game-matrix';
 
 export interface VibePattern {
   id: string;
@@ -7,7 +7,7 @@ export interface VibePattern {
   emoji: string;
   data: number[];
   isPreset?: boolean;
-  defaultMessage?: string; // New: Optional default message for the pattern
+  defaultMessage?: string;
 }
 
 export interface VibeSignal {
@@ -15,12 +15,21 @@ export interface VibeSignal {
   senderId: string;
   senderName: string;
   type: VibeType;
-  text?: string; // New: Message text attached to the vibe
-  count?: number; // For tap vibes
-  duration?: number; // For hold vibes (ms)
-  patternName?: string; // For pattern vibes
-  patternEmoji?: string; // For pattern vibes
-  patternData?: number[]; // For pattern vibes
+  text?: string; // Encrypted string if type is 'chat'
+  count?: number; 
+  duration?: number; 
+  patternName?: string; 
+  patternEmoji?: string; 
+  patternData?: number[]; 
+  points?: { x: number, y: number }[]; // For drawing
+  color?: string; // For drawing color
+  breatheVariant?: 'calm' | 'meditation' | 'sad'; // For breathe mode
+  
+  // Matrix Game Props
+  matrixAction?: 'invite' | 'select' | 'reveal' | 'reset';
+  gridDifficulty?: 'easy' | 'medium' | 'hard';
+  selectionIndex?: number;
+  
   timestamp: number;
 }
 
@@ -43,5 +52,6 @@ export enum AppScreen {
   SETUP = 'setup',
   DASHBOARD = 'dashboard',
   PAIRING = 'pairing',
-  VIBING = 'vibing'
+  VIBING = 'vibing',
+  CHAT = 'chat'
 }

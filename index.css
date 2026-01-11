@@ -1,3 +1,4 @@
+
 /* @tailwind directives removed as we use the CDN script in index.html */
 
 :root {
@@ -7,12 +8,21 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background: #09090b;
+  /* Love and Light: Deep rich gradient base instead of flat black */
+  background: linear-gradient(135deg, #2e1065, #4c0519, #0f172a);
+  background-size: 400% 400%;
+  animation: aurora 15s ease infinite;
   color: #fafafa;
   overflow: hidden;
   overscroll-behavior: none;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
+}
+
+@keyframes aurora {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .font-outfit {
@@ -32,6 +42,25 @@ html, body {
   height: 100%;
 }
 
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+.glass-button:active {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(0.98);
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -41,4 +70,28 @@ html, body {
 .no-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* --- Heartbeat & ECG Animations --- */
+
+@keyframes heartbeat-double {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 114, 182, 0); } /* Pink-400 equivalent */
+  15% { transform: scale(1.04); box-shadow: 0 0 20px 0 rgba(244, 114, 182, 0.3); }
+  30% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 114, 182, 0); }
+  45% { transform: scale(1.08); box-shadow: 0 0 40px 10px rgba(244, 114, 182, 0.5); }
+  65% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 114, 182, 0); }
+  100% { transform: scale(1); }
+}
+
+.animate-heartbeat-double {
+  animation: heartbeat-double 0.85s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes ecg-scan {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ecg {
+  animation: ecg-scan 2s linear infinite;
 }
