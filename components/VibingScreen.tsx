@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeType, VibePattern } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, Send } from 'lucide-react';
 import { triggerHaptic, PRESET_PATTERNS, generateId } from '../constants';
 
 interface Props {
   contact: Contact;
   user: UserProfile;
   onBack: () => void;
-  onSendVibe: (type: VibeType, count?: number, duration?: number, patternName?: string, patternEmoji?: string, patternData?: number[]) => Promise<void>;
+  onSendVibe: (type: VibeType, text?: string, count?: number, duration?: number, patternName?: string, patternEmoji?: string, patternData?: number[]) => Promise<void>;
   customPatterns: VibePattern[];
   onSavePattern: (pattern: VibePattern) => void;
   onDeletePattern: (id: string) => void;
@@ -27,11 +27,14 @@ const VibingScreen: React.FC<Props> = ({
   const [tapCount, setTapCount] = useState(0);
   const [status, setStatus] = useState<'idle' | 'holding' | 'tapped' | 'recording' | 'sending'>('idle');
   const [showRecorder, setShowRecorder] = useState(false);
+  const [message, setMessage] = useState('');
   
+  // Recorder State
   const [recordingData, setRecordingData] = useState<number[]>([]);
   const lastRecordTime = useRef<number | null>(null);
   const [recordingName, setRecordingName] = useState('');
   const [recordingEmoji, setRecordingEmoji] = useState('✨');
+  const [recordingDefaultMsg, setRecordingDefaultMsg] = useState('');
 
   const pressStartTime = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
@@ -41,9 +44,12 @@ const VibingScreen: React.FC<Props> = ({
   const TAP_WINDOW = 600;
 
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+    // e.preventDefault(); // allow focus on input
     if (status === 'recording' || status === 'sending') return;
     
+    // Don't trigger if touching the input field
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+
     setIsPressing(true);
     setStatus('holding');
     pressStartTime.current = Date.now();
@@ -66,7 +72,10 @@ const VibingScreen: React.FC<Props> = ({
 
     if (duration > LONG_PRESS_THRESHOLD) {
       setStatus('sending');
-      onSendVibe('hold', undefined, duration).finally(() => setStatus('idle'));
+      onSendVibe('hold', message, undefined, duration).finally(() => {
+        setStatus('idle');
+        setMessage(''); // Clear message after sending
+      });
       triggerHaptic([100, 200, 100]);
     } else {
       tapCountRef.current += 1;
@@ -77,10 +86,11 @@ const VibingScreen: React.FC<Props> = ({
       tapTimer.current = window.setTimeout(() => {
         const finalCount = tapCountRef.current;
         setStatus('sending');
-        onSendVibe('tap', finalCount).finally(() => {
+        onSendVibe('tap', message, finalCount).finally(() => {
           setStatus('idle');
           setTapCount(0);
           tapCountRef.current = 0;
+          setMessage(''); // Clear message after sending
         });
       }, TAP_WINDOW);
     }
@@ -105,11 +115,13 @@ const VibingScreen: React.FC<Props> = ({
       name: recordingName.trim() || `My Pattern`,
       emoji: recordingEmoji,
       data: recordingData,
-      isPreset: false
+      isPreset: false,
+      defaultMessage: recordingDefaultMsg.trim() // Save default message
     });
     setRecordingData([]);
     setRecordingName('');
     setRecordingEmoji('✨');
+    setRecordingDefaultMsg('');
     lastRecordTime.current = null;
     setShowRecorder(false);
     setStatus('idle');
@@ -126,7 +138,7 @@ const VibingScreen: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col p-6 overflow-hidden relative">
-      <header className="flex items-center justify-between mb-4 z-10">
+      <header className="flex items-center justify-between mb-2 z-10">
         <button onClick={onBack} className="p-2 -ml-2 text-zinc-400 active:scale-90 transition-transform">
           <ChevronLeft size={28} />
         </button>
@@ -141,41 +153,13 @@ const VibingScreen: React.FC<Props> = ({
           <Plus size={24} />
         </button>
       </header>
-
-      {/* Pattern Selector Tray */}
-      <div className="flex space-x-2 overflow-x-auto pb-4 pt-2 no-scrollbar z-10">
-        {allPatterns.map(pattern => (
-          <div key={pattern.id} className="relative group shrink-0">
-            <button
-              disabled={status === 'sending'}
-              onClick={() => {
-                setStatus('sending');
-                triggerHaptic(pattern.data);
-                onSendVibe('pattern', undefined, undefined, pattern.name, pattern.emoji, pattern.data).finally(() => setStatus('idle'));
-              }}
-              className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-full text-xs font-semibold text-zinc-300 active:scale-95 transition-all hover:border-zinc-700 disabled:opacity-50 flex items-center space-x-2"
-            >
-              <span>{pattern.emoji}</span>
-              <span>{pattern.name}</span>
-            </button>
-            {!pattern.isPreset && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onDeletePattern(pattern.id); }}
-                className="absolute -top-1 -right-1 bg-zinc-800 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <X size={10} className="text-zinc-500" />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
+      
       <div className="flex-1 flex flex-col items-center justify-center relative">
         <div className={`absolute inset-0 flex items-center justify-center transition-all duration-700 pointer-events-none ${isPressing ? 'opacity-100 scale-125' : 'opacity-20 scale-100'}`}>
           <div className={`w-80 h-80 rounded-full blur-[100px] ${contact.color} opacity-30`} />
         </div>
 
-        <div className="absolute top-10 text-center z-20 h-20">
+        <div className="absolute top-10 text-center z-20 h-20 pointer-events-none">
           {status === 'sending' ? (
             <div className="flex flex-col items-center animate-pulse">
                <Loader2 className="animate-spin text-zinc-400 mb-2" size={20} />
@@ -187,7 +171,7 @@ const VibingScreen: React.FC<Props> = ({
                <p className="text-zinc-400 text-xs uppercase tracking-widest font-bold">Pulses</p>
             </div>
           ) : status === 'holding' ? (
-            <p className="text-white text-sm font-medium animate-pulse tracking-wide italic">"I'm here..."</p>
+            <p className="text-white text-sm font-medium animate-pulse tracking-wide italic">"{message || "I'm here..."}"</p>
           ) : null}
         </div>
 
@@ -215,15 +199,64 @@ const VibingScreen: React.FC<Props> = ({
           </div>
         </div>
 
-        <div className={`absolute bottom-16 w-full flex justify-center space-x-12 px-6 transition-opacity ${status === 'recording' || status === 'sending' ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`absolute bottom-6 w-full flex justify-center space-x-12 px-6 transition-opacity pointer-events-none ${status === 'recording' || status === 'sending' ? 'opacity-0' : 'opacity-100'}`}>
           <div className="flex flex-col items-center space-y-2">
              <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Tap</p>
-             <p className="text-zinc-300 text-xs">Strong pulses</p>
           </div>
           <div className="flex flex-col items-center space-y-2">
              <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Hold</p>
-             <p className="text-zinc-300 text-xs">Deep touch</p>
           </div>
+        </div>
+      </div>
+
+      {/* Footer Area: Message & Patterns */}
+      <div className={`z-20 transition-all duration-300 ${status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        
+        {/* Message Input */}
+        <div className="mb-4 relative">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                <Send size={14} className={`transition-colors ${message ? 'text-rose-500' : 'text-zinc-600'}`} />
+            </div>
+            <input 
+                type="text" 
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Add a whisper..."
+                className="w-full bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-full py-3 pl-10 pr-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-rose-500/50 transition-all"
+            />
+        </div>
+
+        {/* Pattern Selector Tray */}
+        <div className="flex space-x-2 overflow-x-auto pb-4 no-scrollbar">
+            {allPatterns.map(pattern => (
+            <div key={pattern.id} className="relative group shrink-0">
+                <button
+                disabled={status === 'sending'}
+                onClick={() => {
+                    setStatus('sending');
+                    triggerHaptic(pattern.data);
+                    // Use the typed message if available, otherwise use pattern's default
+                    const textToSend = message || pattern.defaultMessage;
+                    onSendVibe('pattern', textToSend, undefined, undefined, pattern.name, pattern.emoji, pattern.data).finally(() => {
+                        setStatus('idle');
+                        setMessage('');
+                    });
+                }}
+                className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-full text-xs font-semibold text-zinc-300 active:scale-95 transition-all hover:border-zinc-700 disabled:opacity-50 flex items-center space-x-2"
+                >
+                <span>{pattern.emoji}</span>
+                <span>{pattern.name}</span>
+                </button>
+                {!pattern.isPreset && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDeletePattern(pattern.id); }}
+                    className="absolute -top-1 -right-1 bg-zinc-800 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                    <X size={10} className="text-zinc-500" />
+                </button>
+                )}
+            </div>
+            ))}
         </div>
       </div>
 
@@ -234,7 +267,7 @@ const VibingScreen: React.FC<Props> = ({
             <button onClick={() => { setShowRecorder(false); setStatus('idle'); setRecordingData([]); }} className="text-zinc-500 p-2"><X size={24} /></button>
           </div>
           
-          <div className="flex-1 flex flex-col items-center justify-center space-y-10">
+          <div className="flex-1 flex flex-col items-center justify-center space-y-8">
             <div onMouseDown={handleRecordTap} onTouchStart={handleRecordTap} className="w-52 h-52 rounded-[4rem] bg-zinc-900 border-4 border-zinc-800 flex items-center justify-center active:scale-95 active:border-rose-500 transition-all shadow-3xl group cursor-pointer relative">
                <CircleDot size={80} className="text-zinc-700 group-active:text-rose-500 transition-colors" />
                {recordingData.length > 0 && (
@@ -242,12 +275,12 @@ const VibingScreen: React.FC<Props> = ({
                )}
             </div>
             
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-1">
               <p className="text-zinc-400 text-sm">Tap the drum to record a rhythm</p>
               <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{recordingData.length > 0 ? `${Math.floor(recordingData.length / 2) + 1} vibes recorded` : 'Ready to record'}</p>
             </div>
 
-            <div className="w-full space-y-4 max-w-sm">
+            <div className="w-full space-y-3 max-w-sm">
               <div className="flex space-x-3">
                  <div className="relative group">
                     <input 
@@ -258,18 +291,27 @@ const VibingScreen: React.FC<Props> = ({
                     />
                     <Smile className="absolute -top-2 -right-2 text-zinc-600" size={14} />
                  </div>
-                 <input 
-                    type="text" 
-                    placeholder="Pattern Name" 
-                    value={recordingName} 
-                    onChange={(e) => setRecordingName(e.target.value)} 
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 focus:outline-none focus:border-rose-500/50" 
-                  />
+                 <div className="flex-1 space-y-2">
+                    <input 
+                        type="text" 
+                        placeholder="Pattern Name" 
+                        value={recordingName} 
+                        onChange={(e) => setRecordingName(e.target.value)} 
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-3 focus:outline-none focus:border-rose-500/50 text-sm" 
+                    />
+                    <input 
+                        type="text" 
+                        placeholder="Default Message (Optional)" 
+                        value={recordingDefaultMsg} 
+                        onChange={(e) => setRecordingDefaultMsg(e.target.value)} 
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-3 focus:outline-none focus:border-rose-500/50 text-sm" 
+                    />
+                 </div>
               </div>
               <button 
                 onClick={saveRecording} 
                 disabled={recordingData.length === 0} 
-                className="w-full py-5 bg-rose-600 text-white font-bold rounded-2xl disabled:opacity-20 shadow-xl shadow-rose-900/10 active:scale-[0.98] transition-all"
+                className="w-full py-4 bg-rose-600 text-white font-bold rounded-2xl disabled:opacity-20 shadow-xl shadow-rose-900/10 active:scale-[0.98] transition-all"
               >
                 Save My Pattern
               </button>

@@ -7,6 +7,7 @@ export interface VibePattern {
   emoji: string;
   data: number[];
   isPreset?: boolean;
+  defaultMessage?: string; // New: Optional default message for the pattern
 }
 
 export interface VibeSignal {
@@ -14,6 +15,7 @@ export interface VibeSignal {
   senderId: string;
   senderName: string;
   type: VibeType;
+  text?: string; // New: Message text attached to the vibe
   count?: number; // For tap vibes
   duration?: number; // For hold vibes (ms)
   patternName?: string; // For pattern vibes
@@ -27,14 +29,14 @@ export interface Contact {
   name: string;
   pairCode: string;
   color: string;
-  fcmToken?: string; // Added for Push Notifications
+  fcmToken?: string; 
 }
 
 export interface UserProfile {
   id: string;
   displayName: string;
   pairCode: string;
-  fcmToken?: string; // Added for Push Notifications
+  fcmToken?: string; 
 }
 
 export enum AppScreen {

@@ -57,17 +57,25 @@ const VibeReceiver: React.FC<Props> = ({ vibe, contacts }) => {
            </div>
         </div>
 
-        <div className="space-y-2 max-w-xs">
-          <h2 className="text-4xl font-outfit font-bold text-white drop-shadow-xl tracking-tight">
-            {vibe.senderName}
-          </h2>
-          <p className="text-white/80 text-lg font-medium uppercase tracking-widest drop-shadow-md">
-            {vibe.type === 'tap' 
-              ? 'is thinking of you'
-              : vibe.type === 'pattern'
-              ? `sent ${vibe.patternName}`
-              : 'is holding you close'}
-          </p>
+        <div className="space-y-4 max-w-xs">
+          <div>
+            <h2 className="text-4xl font-outfit font-bold text-white drop-shadow-xl tracking-tight mb-1">
+                {vibe.senderName}
+            </h2>
+            <p className="text-white/60 text-xs font-medium uppercase tracking-widest drop-shadow-md">
+                {vibe.type === 'tap' 
+                ? 'is thinking of you'
+                : vibe.type === 'pattern'
+                ? `sent ${vibe.patternName}`
+                : 'is holding you close'}
+            </p>
+          </div>
+          
+          {vibe.text && (
+            <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 animate-in slide-in-from-bottom duration-500 delay-100">
+                <p className="text-xl font-medium text-white italic">"{vibe.text}"</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

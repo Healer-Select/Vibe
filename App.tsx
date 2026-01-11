@@ -209,15 +209,29 @@ const App: React.FC = () => {
         triggerHaptic(vibe.patternData);
       }
 
-      // 2. Trigger System Notification (Fallback if Haptics fail or app is hidden)
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-         // Using Data URI for icon to avoid 404s
+      // 2. Trigger System Notification (Reliable PWA Method)
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
          const ICON_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Cpath d='m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E";
          
-         new Notification(vibe.senderName, {
-            body: vibe.type === 'tap' ? 'Sent you a tap.' : vibe.type === 'hold' ? 'Is holding you.' : `Sent ${vibe.patternName || 'a vibe'}`,
-            icon: ICON_DATA_URI,
-            tag: 'vibe-msg'
+         // Prioritize the custom text message if available
+         let bodyText = '';
+         if (vibe.text) {
+             bodyText = vibe.text;
+         } else if (vibe.type === 'tap') {
+             bodyText = 'Sent you a tap.';
+         } else if (vibe.type === 'hold') {
+             bodyText = 'Is holding you.';
+         } else {
+             bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
+         }
+
+         navigator.serviceWorker.ready.then(registration => {
+             registration.showNotification(vibe.senderName, {
+                body: bodyText,
+                icon: ICON_DATA_URI,
+                tag: 'vibe-msg',
+                data: { url: window.location.href }
+             });
          });
       }
 
@@ -225,7 +239,16 @@ const App: React.FC = () => {
     }
   };
 
-  const sendVibeToPartner = async (targetCode: string, type: 'tap' | 'hold' | 'pattern', count?: number, duration?: number, patternName?: string, patternEmoji?: string, patternData?: number[]) => {
+  const sendVibeToPartner = async (
+    targetCode: string, 
+    type: 'tap' | 'hold' | 'pattern', 
+    text?: string,
+    count?: number, 
+    duration?: number, 
+    patternName?: string, 
+    patternEmoji?: string, 
+    patternData?: number[]
+  ) => {
     if (!ablyRef.current || !user) return;
     
     // Optimistic UI Haptic
@@ -237,6 +260,7 @@ const App: React.FC = () => {
       senderId: user.pairCode,
       senderName: user.displayName,
       type,
+      text,
       count,
       duration,
       patternName,
@@ -247,14 +271,6 @@ const App: React.FC = () => {
 
     try {
       await targetChannel.publish('vibration', payload);
-      
-      // NOTE: Real background Push Notifications require a backend.
-      // If we had a backend, we would call it here:
-      // await fetch('https://my-backend/send-push', { 
-      //    method: 'POST', 
-      //    body: JSON.stringify({ to: activeContact?.fcmToken, ...payload }) 
-      // });
-      
     } catch (err) {
       // Error feedback
       triggerHaptic([150, 100, 150]);
@@ -314,8 +330,8 @@ const App: React.FC = () => {
           contact={activeContact} 
           onBack={() => setScreen(AppScreen.DASHBOARD)}
           user={user}
-          onSendVibe={(type, count, duration, pName, pEmoji, pData) => 
-            sendVibeToPartner(activeContact.pairCode, type, count, duration, pName, pEmoji, pData)
+          onSendVibe={(type, text, count, duration, pName, pEmoji, pData) => 
+            sendVibeToPartner(activeContact.pairCode, type, text, count, duration, pName, pEmoji, pData)
           }
           customPatterns={customPatterns}
           onSavePattern={saveCustomPattern}
