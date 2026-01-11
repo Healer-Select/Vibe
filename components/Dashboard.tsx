@@ -113,14 +113,7 @@ const Dashboard: React.FC<Props> = ({
       <div className="flex-1 flex flex-col space-y-4 overflow-y-auto pb-32 no-scrollbar">
         {contacts.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center space-y-8 text-center pb-12">
-             <div className="relative group">
-                <div className="absolute -inset-4 bg-orange-500/20 rounded-full blur-2xl animate-pulse" />
-                <div className="glass-panel w-24 h-24 rounded-[2.5rem] flex items-center justify-center relative z-10 shadow-lg border border-white/10">
-                  <Heart size={42} className="text-orange-400 fill-orange-400/20" />
-                </div>
-             </div>
-            
-            <div className="space-y-2">
+            <div className="space-y-2 mt-8">
                 <h2 className="text-2xl font-outfit font-semibold text-white px-4 leading-tight">Pair with someone to connect</h2>
                 <p className="text-white/60 text-sm max-w-[240px] mx-auto">Your private code is <span className="text-orange-300 font-mono font-bold select-all tracking-wider">{user.pairCode}</span></p>
             </div>

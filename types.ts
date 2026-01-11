@@ -1,5 +1,5 @@
 
-export type VibeType = 'tap' | 'hold' | 'pattern' | 'chat' | 'heartbeat' | 'draw' | 'breathe' | 'game-matrix';
+export type VibeType = 'tap' | 'hold' | 'pattern' | 'chat' | 'chat-clear' | 'heartbeat' | 'draw' | 'breathe' | 'game-matrix';
 
 export interface VibePattern {
   id: string;

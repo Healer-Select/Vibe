@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeType, VibePattern, VibeSignal } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info, Play, Pause } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info, Play, Pause, Square } from 'lucide-react';
 import { triggerHaptic, generateId } from '../constants';
 
 interface Props {
@@ -22,7 +22,7 @@ const VibingScreen: React.FC<Props> = ({
   onBack, 
   incomingVibe,
   onSendVibe, 
-  onOpenChat,
+  onOpenChat, 
   customPatterns, 
   onSavePattern, 
   onDeletePattern 
@@ -50,6 +50,7 @@ const VibingScreen: React.FC<Props> = ({
   // Breathing State
   const [breatheVariant, setBreatheVariant] = useState<'calm' | 'meditation' | 'sad'>('calm');
   const [breathePhase, setBreathePhase] = useState<'in' | 'out'>('in');
+  const [isBreatheActive, setIsBreatheActive] = useState(false);
   
   // Matrix Game State
   const [matrixState, setMatrixState] = useState<'briefing' | 'playing' | 'waiting' | 'result'>('briefing');
@@ -62,6 +63,7 @@ const VibingScreen: React.FC<Props> = ({
   const [recordingName, setRecordingName] = useState('');
   const [recordingEmoji, setRecordingEmoji] = useState('✨');
   const [recordingDefaultMsg, setRecordingDefaultMsg] = useState('');
+  const drumStartTime = useRef<number>(0);
 
   const pressStartTime = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
@@ -81,7 +83,7 @@ const VibingScreen: React.FC<Props> = ({
     heartbeat: {
       title: "Shared Heartbeat",
       question: "Can I hold your hand from miles away?",
-      answer: "Yes. Use the Play/Pause button to start. When active, both phones pulse in sync. If one stops, both stop. 💓🤝",
+      answer: "Yes. Use the Play button to start. When active, both phones pulse in sync. If one stops, both stop. 💓🤝",
       color: "text-rose-400"
     },
     draw: {
@@ -93,7 +95,7 @@ const VibingScreen: React.FC<Props> = ({
     breathe: {
       title: "Shared Breath",
       question: "Can we find peace together?",
-      answer: "Synchronize your breathing rhythms. Follow the circle as it expands and contracts. Feel the vibration guide you both to a shared calm. 🌬️🧘",
+      answer: "Press Play to synchronize your rhythms. Follow the circle as it expands and contracts. Feel the vibration guide you both to a shared calm. 🌬️🧘",
       color: "text-sky-400"
     },
     matrix: {
@@ -108,52 +110,57 @@ const VibingScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!incomingVibe) return;
 
-    if (incomingVibe.type === 'breathe' && incomingVibe.breatheVariant) {
-        setMode('breathe');
-        setBreatheVariant(incomingVibe.breatheVariant);
+    if (incomingVibe.type === 'breathe') {
+        if (mode === 'breathe') {
+             if (incomingVibe.breatheVariant) setBreatheVariant(incomingVibe.breatheVariant);
+             if (incomingVibe.count === 0) setIsBreatheActive(false); // Stop signal
+             else setIsBreatheActive(true); // Start signal
+        }
     } else if (incomingVibe.type === 'draw' && incomingVibe.points) {
-        setMode('draw');
-        // Render points
-        if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-                ctx.fillStyle = incomingVibe.color || '#e879f9';
-                incomingVibe.points.forEach(p => {
-                    ctx.beginPath();
-                    ctx.arc(p.x * window.innerWidth, p.y * window.innerHeight, 5, 0, Math.PI * 2);
-                    ctx.fill();
-                });
+        if (mode === 'draw') {
+            // Render points
+            if (canvasRef.current) {
+                const ctx = canvasRef.current.getContext('2d');
+                if (ctx) {
+                    ctx.fillStyle = incomingVibe.color || '#e879f9';
+                    incomingVibe.points.forEach(p => {
+                        ctx.beginPath();
+                        ctx.arc(p.x * window.innerWidth, p.y * window.innerHeight, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
             }
         }
     } else if (incomingVibe.type === 'heartbeat') {
-        if (mode !== 'heartbeat') setMode('heartbeat');
-        
-        // Check if this is a stop signal (we use count=0 as a convention for STOP)
-        if (incomingVibe.count === 0) {
-            setIsHeartbeatActive(false);
-        } else {
-            setIsHeartbeatActive(true);
+        if (mode === 'heartbeat') {
+            // Check if this is a stop signal (count=0)
+            if (incomingVibe.count === 0) {
+                setIsHeartbeatActive(false);
+            } else {
+                setIsHeartbeatActive(true);
+            }
         }
     } else if (incomingVibe.type === 'game-matrix') {
-        setMode('matrix');
-        if (incomingVibe.matrixAction === 'invite' && incomingVibe.gridDifficulty) {
-            setMatrixDifficulty(incomingVibe.gridDifficulty);
-            setMatrixState('playing'); // Skip briefing if invited
-            setMyMatrixSelection(null);
-            setPartnerMatrixSelection(null);
-        } else if (incomingVibe.matrixAction === 'select' && typeof incomingVibe.selectionIndex === 'number') {
-            setPartnerMatrixSelection(incomingVibe.selectionIndex);
-            // If I have already selected, go to result immediately
-            if (myMatrixSelection !== null) {
-                setMatrixState('result');
+        if (mode === 'matrix') {
+            if (incomingVibe.matrixAction === 'invite' && incomingVibe.gridDifficulty) {
+                setMatrixDifficulty(incomingVibe.gridDifficulty);
+                setMatrixState('playing'); // Skip briefing if invited
+                setMyMatrixSelection(null);
+                setPartnerMatrixSelection(null);
+            } else if (incomingVibe.matrixAction === 'select' && typeof incomingVibe.selectionIndex === 'number') {
+                setPartnerMatrixSelection(incomingVibe.selectionIndex);
+                // If I have already selected, go to result immediately
+                if (myMatrixSelection !== null) {
+                    setMatrixState('result');
+                }
+            } else if (incomingVibe.matrixAction === 'reset') {
+                setMatrixState('briefing');
+                setMyMatrixSelection(null);
+                setPartnerMatrixSelection(null);
             }
-        } else if (incomingVibe.matrixAction === 'reset') {
-            setMatrixState('briefing');
-            setMyMatrixSelection(null);
-            setPartnerMatrixSelection(null);
         }
     }
-  }, [incomingVibe]);
+  }, [incomingVibe, mode]);
 
   // Handle Heartbeat Loop (Sender)
   useEffect(() => {
@@ -183,12 +190,22 @@ const VibingScreen: React.FC<Props> = ({
       }
   };
 
+  const toggleBreathe = () => {
+    if (isBreatheActive) {
+        onSendVibe('breathe', undefined, 0); // Stop signal
+        setIsBreatheActive(false);
+    } else {
+        onSendVibe('breathe', undefined, 1, undefined, undefined, undefined, undefined, undefined, undefined, breatheVariant); // Start
+        setIsBreatheActive(true);
+    }
+  };
+
   // Handle Breathe Animation & Vibration Loop
   useEffect(() => {
       let interval: NodeJS.Timeout;
       let vibrationTimeout: NodeJS.Timeout;
       
-      if (mode === 'breathe') {
+      if (mode === 'breathe' && isBreatheActive) {
           // Duration config based on variant
           const config = {
               calm: { total: 4000, inhale: 2000 },
@@ -211,16 +228,13 @@ const VibingScreen: React.FC<Props> = ({
           runCycle();
           // Loop
           interval = setInterval(runCycle, currentConfig.total);
-          
-          // Send signal to partner to sync up
-          onSendVibe('breathe', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, breatheVariant);
       }
       
       return () => {
           clearInterval(interval);
           clearTimeout(vibrationTimeout);
       };
-  }, [mode, breatheVariant]);
+  }, [mode, breatheVariant, isBreatheActive]);
 
   // Handle Default Mode Touches
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -358,6 +372,29 @@ const VibingScreen: React.FC<Props> = ({
       onSendVibe('game-matrix', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'invite', matrixDifficulty);
   };
 
+  const handleDrumStart = (e: React.SyntheticEvent) => {
+    drumStartTime.current = Date.now();
+    triggerHaptic(30);
+  };
+
+  const handleDrumEnd = (e: React.SyntheticEvent) => {
+    if (drumStartTime.current === 0) return;
+    
+    const duration = Date.now() - drumStartTime.current;
+    drumStartTime.current = 0;
+    
+    // If held longer than 250ms, it's a long vibration (capped at 3s)
+    // If tap, it's 100ms
+    const isLong = duration > 250;
+    const vibe = isLong ? Math.min(duration, 3000) : 100;
+    const pause = 150; // consistent gap
+
+    // Feedback
+    triggerHaptic(vibe);
+    
+    setRecordingData(prev => [...prev, vibe, pause]);
+  };
+
   const renderPatternSlot = (index: number) => {
     const pattern = customPatterns[index];
     const isEmpty = !pattern;
@@ -403,6 +440,7 @@ const VibingScreen: React.FC<Props> = ({
         // FLAMINGO THEME
         return (
             <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in duration-300 relative">
+                 {/* Only Close Button */}
                  <button onClick={() => { setIsHeartbeatActive(false); onSendVibe('heartbeat', undefined, 0); setMode('default'); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white">
                     <X size={24} />
                  </button>
@@ -410,46 +448,41 @@ const VibingScreen: React.FC<Props> = ({
                 <p className="text-orange-200/60 uppercase tracking-widest text-xs font-bold mb-12">
                     {isHeartbeatActive ? 'Sending Heartbeat...' : 'Heartbeat Paused'}
                 </p>
-                <div 
-                    className={`w-72 h-72 rounded-full flex items-center justify-center relative overflow-hidden transition-all duration-300 border-4 backdrop-blur-md mb-8
-                        ${isHeartbeatActive 
-                            ? 'bg-rose-500/20 border-rose-400 animate-heartbeat-double shadow-[0_0_50px_rgba(251,113,133,0.4)]' 
-                            : 'bg-white/5 border-white/10'
-                        }`}
-                >
-                    {/* ECG Background Layer - FLAMINGO COLORS */}
-                    <div className="absolute inset-0 flex items-center opacity-40 pointer-events-none">
-                        <svg 
-                            className={`w-[200%] h-32 stroke-orange-400 stroke-[3px] fill-none ${isHeartbeatActive ? 'animate-ecg' : ''}`} 
-                            viewBox="0 0 400 100" 
-                            preserveAspectRatio="none"
-                        >
-                            <path d="
-                                M0 50 L20 50 L30 20 L40 80 L50 50 L90 50 
-                                L110 50 L120 10 L130 90 L140 50 L180 50
-                                L200 50 L220 50 L230 20 L240 80 L250 50 L290 50
-                                L310 50 L320 10 L330 90 L340 50 L380 50 L400 50
-                            " vectorEffect="non-scaling-stroke" />
-                        </svg>
-                    </div>
-                    
-                    {/* Center Icon Layer - Rose/Orange Mix */}
-                    <div className="relative z-10 flex flex-col items-center justify-center">
-                         <Heart 
-                            size={100} 
-                            strokeWidth={1.2}
-                            className={`transition-all duration-300 ${isHeartbeatActive ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)] scale-110' : 'fill-transparent text-white/20'}`} 
-                         />
-                    </div>
-                </div>
-
-                {/* PLAY / PAUSE CONTROLS */}
+                
+                {/* Refined Play/Pause Button - Integrated into a pill shape with text */}
                 <button 
                     onClick={toggleHeartbeat}
-                    className={`p-6 rounded-full transition-all duration-300 ${isHeartbeatActive ? 'bg-rose-500 text-white shadow-[0_0_30px_rgba(244,63,94,0.4)]' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    className={`relative group active:scale-95 transition-all duration-300 rounded-[3rem] p-1 flex items-center shadow-2xl ${isHeartbeatActive ? 'bg-rose-500 shadow-rose-900/40' : 'bg-white/10 hover:bg-white/20'}`}
                 >
-                    {isHeartbeatActive ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
+                    <div className="flex items-center gap-4 px-6 py-4">
+                        {isHeartbeatActive ? (
+                            <>
+                                <Pause size={32} className="text-white fill-white" />
+                                <span className="text-white font-bold tracking-widest uppercase text-sm">Stop Pulse</span>
+                            </>
+                        ) : (
+                            <>
+                                <Play size={32} className="text-white fill-white ml-1" />
+                                <span className="text-white font-bold tracking-widest uppercase text-sm">Start Pulse</span>
+                            </>
+                        )}
+                    </div>
                 </button>
+
+                {/* Heart Visual */}
+                <div 
+                    className={`mt-12 w-64 h-64 flex items-center justify-center transition-all duration-500
+                        ${isHeartbeatActive 
+                            ? 'animate-heartbeat-double opacity-100' 
+                            : 'opacity-50 grayscale-[0.5]'
+                        }`}
+                >
+                    <Heart 
+                        size={180} 
+                        strokeWidth={0.5}
+                        className={`transition-all duration-300 ${isHeartbeatActive ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_50px_rgba(244,63,94,0.6)]' : 'fill-white/10 text-white/20'}`} 
+                    />
+                </div>
             </div>
         )
     }
@@ -468,7 +501,7 @@ const VibingScreen: React.FC<Props> = ({
                      <p className="text-fuchsia-200/60 uppercase tracking-widest text-xs font-bold bg-fuchsia-500/10 px-4 py-1 rounded-full backdrop-blur border border-fuchsia-500/20">Touch to draw</p>
                  </div>
 
-                 {/* Info Button for Draw Mode - Replaced HelpCircle with Info */}
+                 {/* Info Button */}
                  <button onClick={() => setShowInfo(true)} className="absolute top-8 right-8 z-[60] w-10 h-10 flex items-center justify-center text-white/40 hover:text-white rounded-full bg-black/20 backdrop-blur">
                     <Info size={24} />
                  </button>
@@ -499,38 +532,34 @@ const VibingScreen: React.FC<Props> = ({
 
         return (
             <div className="flex-1 flex flex-col items-center justify-center animate-in fade-in duration-1000 relative">
-                 <button onClick={() => { setMode('default'); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white">
+                 <button onClick={() => { setMode('default'); setIsBreatheActive(false); onSendVibe('breathe', undefined, 0); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white">
                     <X size={24} />
                  </button>
 
-                 <p className="text-sky-200/60 uppercase tracking-widest text-xs font-bold mb-32">Breathe Together</p>
+                 <p className="text-sky-200/60 uppercase tracking-widest text-xs font-bold mb-12">Breathe Together</p>
                  
                  <div className="relative flex items-center justify-center mb-16">
                      {/* Breathing Animation */}
                      <div 
                         className={`w-24 h-24 bg-sky-400/30 rounded-full absolute transition-all ease-in-out`}
                         style={{ 
-                            transform: breathePhase === 'in' ? 'scale(3)' : 'scale(1)',
-                            opacity: breathePhase === 'in' ? 0.4 : 0,
+                            transform: (breathePhase === 'in' && isBreatheActive) ? 'scale(3)' : 'scale(1)',
+                            opacity: (breathePhase === 'in' && isBreatheActive) ? 0.4 : 0.1,
                             transitionDuration: activeDuration 
-                        }} 
-                     />
-                     <div 
-                        className={`w-32 h-32 bg-indigo-400/20 rounded-full absolute blur-xl transition-all ease-in-out`}
-                        style={{ 
-                             transform: breathePhase === 'in' ? 'scale(2.5)' : 'scale(1)',
-                             transitionDuration: activeDuration
                         }} 
                      />
                      
                      <div 
-                        className={`w-48 h-48 border-2 border-sky-300/40 rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(125,211,252,0.2)] transition-all ease-in-out backdrop-blur-sm`}
+                        className={`w-48 h-48 border-2 ${isBreatheActive ? 'border-sky-300/40 shadow-[0_0_60px_rgba(125,211,252,0.2)]' : 'border-white/10'} rounded-full flex items-center justify-center transition-all ease-in-out backdrop-blur-sm`}
                         style={{ 
-                            transform: breathePhase === 'in' ? 'scale(1.5)' : 'scale(1)',
+                            transform: (breathePhase === 'in' && isBreatheActive) ? 'scale(1.5)' : 'scale(1)',
                             transitionDuration: activeDuration 
                         }}
                      >
-                         <Wind size={40} className="text-sky-300 opacity-90" />
+                         {/* Play/Stop Control inside the circle */}
+                         <button onClick={toggleBreathe} className="p-4 rounded-full bg-white/5 hover:bg-white/20 transition-colors">
+                             {isBreatheActive ? <Square size={32} className="text-white fill-white" /> : <Play size={40} className="text-white fill-white ml-2" />}
+                         </button>
                      </div>
                  </div>
 
@@ -844,12 +873,19 @@ const VibingScreen: React.FC<Props> = ({
           </div>
           
           <div className="flex-1 flex flex-col items-center justify-center space-y-8">
-            <div onMouseDown={() => { triggerHaptic(80); setRecordingData(prev => [...prev, 100, 100]); }} className="w-52 h-52 rounded-[4rem] glass-button flex items-center justify-center active:scale-95 active:border-pink-500 transition-all shadow-2xl group cursor-pointer relative">
-               <CircleDot size={80} className="text-white/40 group-active:text-pink-400 transition-colors" />
+            <div 
+                onMouseDown={handleDrumStart}
+                onMouseUp={handleDrumEnd}
+                onMouseLeave={handleDrumEnd}
+                onTouchStart={handleDrumStart}
+                onTouchEnd={handleDrumEnd}
+                className="w-52 h-52 rounded-[4rem] glass-button flex items-center justify-center active:scale-95 active:border-pink-500 transition-all shadow-2xl group cursor-pointer relative touch-none select-none"
+            >
+               <CircleDot size={80} className="text-white/40 group-active:text-pink-400 transition-colors pointer-events-none" />
             </div>
             
             <div className="text-center space-y-1">
-              <p className="text-white/60 text-sm">Tap the drum to record a rhythm</p>
+              <p className="text-white/60 text-sm">Tap for short, Hold for long</p>
               <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold">{recordingData.length > 0 ? `${Math.floor(recordingData.length / 2) + 1} vibes recorded` : 'Ready to record'}</p>
             </div>
 

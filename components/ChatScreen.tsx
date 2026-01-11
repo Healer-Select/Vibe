@@ -10,6 +10,7 @@ interface Props {
   onBack: () => void;
   onSendMessage: (text: string) => void;
   incomingMessage: VibeSignal | null;
+  onDeleteHistory: () => void;
 }
 
 interface ChatMessage {
@@ -21,7 +22,7 @@ interface ChatMessage {
 
 const COMMON_EMOJIS = ['❤️', '😘', '🥺', '🫂', '✨', '🔥', '💖', '🥰', '🌙', '🏠', '🔐', '🌊'];
 
-const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, incomingMessage }) => {
+const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, incomingMessage, onDeleteHistory }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
@@ -53,17 +54,22 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
 
   // Handle incoming encrypted messages
   useEffect(() => {
-    if (incomingMessage && incomingMessage.type === 'chat' && incomingMessage.text) {
-        // Decrypt the message
-        decryptMessage(incomingMessage.text, user.pairCode, contact.pairCode).then(decryptedText => {
-            const newMessage: ChatMessage = {
-                id: incomingMessage.id,
-                senderId: incomingMessage.senderId,
-                text: decryptedText,
-                timestamp: incomingMessage.timestamp
-            };
-            setMessages(prev => [...prev, newMessage]);
-        });
+    if (incomingMessage) {
+        if (incomingMessage.type === 'chat' && incomingMessage.text) {
+             // Decrypt the message
+            decryptMessage(incomingMessage.text, user.pairCode, contact.pairCode).then(decryptedText => {
+                const newMessage: ChatMessage = {
+                    id: incomingMessage.id,
+                    senderId: incomingMessage.senderId,
+                    text: decryptedText,
+                    timestamp: incomingMessage.timestamp
+                };
+                setMessages(prev => [...prev, newMessage]);
+            });
+        } else if (incomingMessage.type === 'chat-clear') {
+            // Partner cleared history
+            setMessages([]);
+        }
     }
   }, [incomingMessage, user.pairCode, contact.pairCode]);
 
@@ -114,7 +120,7 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
         </div>
         
         <button 
-            onClick={() => { if(confirm('Clear chat history?')) setMessages([]); }} 
+            onClick={() => { if(confirm('Clear chat history for both?')) { setMessages([]); onDeleteHistory(); } }} 
             className="p-2 text-zinc-600 hover:text-rose-500 transition-colors"
         >
             <Trash2 size={18} />

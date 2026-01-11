@@ -208,11 +208,16 @@ const App: React.FC = () => {
     if (contact) {
       
       // Handle Chat Messages Distinctly
-      if (vibe.type === 'chat') {
+      if (vibe.type === 'chat' || vibe.type === 'chat-clear') {
           setIncomingChatMessage(vibe);
-          setIncomingVibe(vibe); // Also trigger receiver overlay for chat notifications
-          if (screen !== AppScreen.CHAT) {
-             triggerHaptic([50, 50]);
+          
+          if (vibe.type === 'chat') {
+            setIncomingVibe(vibe); // Also trigger receiver overlay for chat notifications
+            if (screen !== AppScreen.CHAT) {
+               triggerHaptic([50, 50]);
+            }
+          } else {
+             // chat-clear: just update chat screen if open, no notification needed
           }
       } 
       // Handle specialized modes (Draw, Breathe, Heartbeat, Game)
@@ -261,18 +266,20 @@ const App: React.FC = () => {
          else if (vibe.type === 'hold') bodyText = 'Is holding you.';
          else bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
 
-         navigator.serviceWorker.ready.then(registration => {
-             registration.showNotification(vibe.senderName, {
-                body: bodyText,
-                icon: ICON_DATA_URI,
-                tag: 'vibe-msg',
-                data: { url: window.location.href }
+         if (vibe.type !== 'chat-clear') {
+             navigator.serviceWorker.ready.then(registration => {
+                 registration.showNotification(vibe.senderName, {
+                    body: bodyText,
+                    icon: ICON_DATA_URI,
+                    tag: 'vibe-msg',
+                    data: { url: window.location.href }
+                 });
              });
-         });
+         }
       }
 
       // Clear signal after delay
-      if (vibe.type !== 'chat') {
+      if (vibe.type !== 'chat' && vibe.type !== 'chat-clear') {
         setTimeout(() => setIncomingVibe(null), 5000);
       }
     }
@@ -371,63 +378,72 @@ const App: React.FC = () => {
         return true;
     }
 
-    // If we ARE in Vibing screen:
-    // Don't show overlay for the complex modes because VibingScreen handles them internally
-    if (['draw', 'heartbeat', 'breathe', 'game-matrix'].includes(incomingVibe.type)) {
-        return false;
-    }
+    // In Vibing screen: 
+    // We want to show invites via the overlay now, instead of auto-opening
+    // So we show the overlay for everything EXCEPT when we are already in that specific mode and receiving data for it
+    // But since the overlay component itself doesn't know the current mode, we keep it simple:
+    // Show overlay for ALL alerts in Vibing screen. 
+    // The user will see "Partner invited you to Matrix" and can click the Matrix button manually.
     
-    // Show overlay for 'tap', 'hold', 'pattern', 'chat' (so you see whispers even while Vibing)
     return true;
   };
 
   return (
-    <div className="min-h-screen h-full w-full flex flex-col no-select">
-      {screen === AppScreen.SETUP && <SetupScreen onComplete={handleSetupComplete} />}
-      {screen === AppScreen.DASHBOARD && user && (
-        <Dashboard 
-          user={user} 
-          contacts={contacts} 
-          status={connectionStatus}
-          onlineContacts={onlineContacts}
-          onAdd={() => setScreen(AppScreen.PAIRING)}
-          onContactClick={(c) => { setActiveContact(c); setScreen(AppScreen.VIBING); }}
-          onDeleteContact={deleteContact}
-          onResetApp={resetApp}
-          onUpdateUser={handleUpdateUser}
-        />
-      )}
-      {screen === AppScreen.PAIRING && <PairingScreen onBack={() => setScreen(AppScreen.DASHBOARD)} onAdd={handleAddContact} />}
+    <div className="min-h-screen h-full w-full flex flex-col no-select relative overflow-hidden">
+      {/* Ad Space Buffers */}
+      <div className="w-full h-12 shrink-0 bg-transparent z-0 pointer-events-none" />
       
-      {screen === AppScreen.VIBING && activeContact && user && (
-        <VibingScreen 
-          contact={activeContact} 
-          user={user}
-          onBack={() => setScreen(AppScreen.DASHBOARD)}
-          incomingVibe={incomingVibe}
-          onSendVibe={(type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx) => 
-            sendVibeToPartner(activeContact.pairCode, type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx)
-          }
-          onOpenChat={() => setScreen(AppScreen.CHAT)}
-          customPatterns={customPatterns}
-          onSavePattern={saveCustomPattern}
-          onDeletePattern={deleteCustomPattern}
-        />
-      )}
+      <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
+          {screen === AppScreen.SETUP && <SetupScreen onComplete={handleSetupComplete} />}
+          {screen === AppScreen.DASHBOARD && user && (
+            <Dashboard 
+              user={user} 
+              contacts={contacts} 
+              status={connectionStatus}
+              onlineContacts={onlineContacts}
+              onAdd={() => setScreen(AppScreen.PAIRING)}
+              onContactClick={(c) => { setActiveContact(c); setScreen(AppScreen.VIBING); }}
+              onDeleteContact={deleteContact}
+              onResetApp={resetApp}
+              onUpdateUser={handleUpdateUser}
+            />
+          )}
+          {screen === AppScreen.PAIRING && <PairingScreen onBack={() => setScreen(AppScreen.DASHBOARD)} onAdd={handleAddContact} />}
+          
+          {screen === AppScreen.VIBING && activeContact && user && (
+            <VibingScreen 
+              contact={activeContact} 
+              user={user}
+              onBack={() => setScreen(AppScreen.DASHBOARD)}
+              incomingVibe={incomingVibe}
+              onSendVibe={(type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx) => 
+                sendVibeToPartner(activeContact.pairCode, type, text, count, duration, pName, pEmoji, pData, points, color, breatheVariant, matrixAction, gridDiff, selIdx)
+              }
+              onOpenChat={() => setScreen(AppScreen.CHAT)}
+              customPatterns={customPatterns}
+              onSavePattern={saveCustomPattern}
+              onDeletePattern={deleteCustomPattern}
+            />
+          )}
 
-      {screen === AppScreen.CHAT && activeContact && user && (
-        <ChatScreen 
-          contact={activeContact}
-          user={user}
-          onBack={() => setScreen(AppScreen.VIBING)}
-          onSendMessage={(text) => sendVibeToPartner(activeContact.pairCode, 'chat', text)}
-          incomingMessage={incomingChatMessage}
-        />
-      )}
+          {screen === AppScreen.CHAT && activeContact && user && (
+            <ChatScreen 
+              contact={activeContact}
+              user={user}
+              onBack={() => setScreen(AppScreen.VIBING)}
+              onSendMessage={(text) => sendVibeToPartner(activeContact.pairCode, 'chat', text)}
+              incomingMessage={incomingChatMessage}
+              onDeleteHistory={() => sendVibeToPartner(activeContact.pairCode, 'chat-clear')}
+            />
+          )}
+      </div>
 
       {shouldShowOverlay() && incomingVibe && (
           <VibeReceiver vibe={incomingVibe} contacts={contacts} />
       )}
+      
+       {/* Ad Space Buffers */}
+       <div className="w-full h-12 shrink-0 bg-transparent z-0 pointer-events-none" />
     </div>
   );
 };
