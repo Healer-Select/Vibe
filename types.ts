@@ -12,7 +12,8 @@ export interface VibePattern {
 
 export interface VibeSignal {
   id: string;
-  senderId: string;
+  senderId: string; // This is the Pair Code (e.g. "ALEX")
+  senderUniqueId?: string; // This is the UUID (e.g. "a1b2...") - Unique per device
   senderName: string;
   type: VibeType;
   text?: string; // Encrypted string if type is 'chat'

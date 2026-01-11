@@ -199,45 +199,55 @@ const App: React.FC = () => {
   };
 
   const receiveVibe = (vibe: VibeSignal) => {
-    // Ignore my own messages
-    if (user && vibe.senderId === user.pairCode) return;
+    // Ignore my own messages (Self-Echo Cancellation)
+    if (user) {
+        if (vibe.senderUniqueId && vibe.senderUniqueId === user.id) return;
+        if (!vibe.senderUniqueId && vibe.senderId === user.pairCode) return;
+    }
     
     const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
     const contact = savedContacts.find((c: Contact) => c.pairCode === vibe.senderId);
     
     if (contact) {
       
-      // Handle Chat Messages Distinctly
+      // --- CHAT LOGIC ---
       if (vibe.type === 'chat' || vibe.type === 'chat-clear') {
           setIncomingChatMessage(vibe);
           
           if (vibe.type === 'chat') {
-            setIncomingVibe(vibe); // Also trigger receiver overlay for chat notifications
+            // DO NOT setIncomingVibe(vibe) here. We don't want the giant heart overlay.
+            // Just haptic and maybe a small toast if implemented later.
             if (screen !== AppScreen.CHAT) {
-               triggerHaptic([50, 50]);
+               triggerHaptic([30, 30]); // Discrete double tap
             }
-          } else {
-             // chat-clear: just update chat screen if open, no notification needed
           }
+          // Note: We removed 'return' here so that notifications can still trigger below
       } 
-      // Handle specialized modes (Draw, Breathe, Heartbeat, Game)
+      
+      // --- SPECIAL MODES (DRAW, BREATHE, HEARTBEAT, MATRIX) ---
       else if (['draw', 'breathe', 'heartbeat', 'game-matrix'].includes(vibe.type)) {
+          
           setIncomingVibe(vibe); 
           
+          // Specific Haptic Logic per Mode
           if (vibe.type === 'heartbeat') {
-              // Heartbeat stops if count is 0 (signal to stop)
               if (vibe.count === 0) {
-                // handled by VibingScreen effect usually, but good to know
+                 // Stop signal - no haptic
               } else {
                  triggerHaptic([50, 100, 50]);
               }
-          } else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') {
-              triggerHaptic([50, 50, 50, 50]); 
-          } else {
-              triggerHaptic(20);
+          } 
+          else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') {
+               // Invitation - Silent or very short, waiting for acceptance
+               triggerHaptic(20); 
+          }
+          else if (vibe.type === 'draw') {
+             // Drawing should be silent unless it's the very first touch of a stroke, handled by client
+             // We generally disable haptic for draw stream to avoid buzzing
           }
       }
-      // Standard Vibes (Tap, Hold, Pattern)
+      
+      // --- STANDARD VIBES (TAP, HOLD, PATTERN) ---
       else {
           setIncomingVibe(vibe);
           
@@ -251,7 +261,7 @@ const App: React.FC = () => {
           }
       }
 
-      // 2. Trigger System Notification (Reliable PWA Method)
+      // --- SYSTEM NOTIFICATION (BACKGROUND) ---
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
          const ICON_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Cpath d='m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E";
          
@@ -259,29 +269,24 @@ const App: React.FC = () => {
          if (vibe.type === 'chat') bodyText = "Sent you a secret message";
          else if (vibe.type === 'heartbeat') bodyText = "Is sending their heartbeat";
          else if (vibe.type === 'draw') bodyText = "Is drawing something for you";
-         else if (vibe.type === 'breathe') bodyText = "Wants to breathe with you";
-         else if (vibe.type === 'game-matrix') bodyText = "Invited you to play Matrix";
+         else if (vibe.type === 'breathe') bodyText = "Invited you to breathe";
+         else if (vibe.type === 'game-matrix') bodyText = "Invited you to play Telepathy";
          else if (vibe.text) bodyText = vibe.text;
          else if (vibe.type === 'tap') bodyText = 'Sent you a tap.';
          else if (vibe.type === 'hold') bodyText = 'Is holding you.';
          else bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
 
-         if (vibe.type !== 'chat-clear') {
-             navigator.serviceWorker.ready.then(registration => {
-                 registration.showNotification(vibe.senderName, {
-                    body: bodyText,
-                    icon: ICON_DATA_URI,
-                    tag: 'vibe-msg',
-                    data: { url: window.location.href }
-                 });
+         navigator.serviceWorker.ready.then(registration => {
+             registration.showNotification(vibe.senderName, {
+                body: bodyText,
+                icon: ICON_DATA_URI,
+                tag: 'vibe-msg',
+                data: { url: window.location.href }
              });
-         }
+         });
       }
 
-      // Clear signal after delay
-      if (vibe.type !== 'chat' && vibe.type !== 'chat-clear') {
-        setTimeout(() => setIncomingVibe(null), 5000);
-      }
+      // Auto-clear signal logic moved to VibeReceiver to allow user interaction for Invites
     }
   };
 
@@ -303,7 +308,7 @@ const App: React.FC = () => {
   ) => {
     if (!ablyRef.current || !user) return;
     
-    // Optimistic UI Haptic for simple signals (exclude continuous/drawing modes to avoid lag)
+    // Optimistic UI Haptic (only for simple local interaction)
     if (type === 'tap' || type === 'hold' || type === 'pattern') triggerHaptic(40);
 
     const targetChannel = ablyRef.current.channels.get(`vibe-${targetCode}`);
@@ -317,6 +322,7 @@ const App: React.FC = () => {
     const payload: VibeSignal = {
       id: generateId(),
       senderId: user.pairCode,
+      senderUniqueId: user.id,
       senderName: user.displayName,
       type,
       text: processedText,
@@ -337,7 +343,6 @@ const App: React.FC = () => {
     try {
       await targetChannel.publish('vibration', payload);
     } catch (err) {
-      // Error feedback
       if (type !== 'chat') triggerHaptic([150, 100, 150]);
     }
   };
@@ -372,18 +377,12 @@ const App: React.FC = () => {
   const shouldShowOverlay = () => {
     if (!incomingVibe) return false;
     
-    // If we are NOT in Vibing, always show (unless it's chat in chat screen)
-    if (screen !== AppScreen.VIBING) {
-        if (screen === AppScreen.CHAT && incomingVibe.type === 'chat') return false;
-        return true;
-    }
-
-    // In Vibing screen: 
-    // We want to show invites via the overlay now, instead of auto-opening
-    // So we show the overlay for everything EXCEPT when we are already in that specific mode and receiving data for it
-    // But since the overlay component itself doesn't know the current mode, we keep it simple:
-    // Show overlay for ALL alerts in Vibing screen. 
-    // The user will see "Partner invited you to Matrix" and can click the Matrix button manually.
+    // Chat handled separately via toast/haptic only
+    if (incomingVibe.type === 'chat') return false; 
+    
+    // If we are currently IN the specific mode that is sending data, don't show overlay
+    // But since App doesn't know internal VibingScreen mode state easily, we rely on VibeReceiver to be smart
+    // or we just show invites.
     
     return true;
   };
@@ -439,7 +438,11 @@ const App: React.FC = () => {
       </div>
 
       {shouldShowOverlay() && incomingVibe && (
-          <VibeReceiver vibe={incomingVibe} contacts={contacts} />
+          <VibeReceiver 
+            vibe={incomingVibe} 
+            contacts={contacts} 
+            onDismiss={() => setIncomingVibe(null)} 
+          />
       )}
       
        {/* Ad Space Buffers */}
