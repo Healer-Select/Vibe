@@ -2,8 +2,8 @@
 /* @tailwind directives removed as we use the CDN script in index.html */
 
 :root {
-  --safe-top: env(safe-area-inset-top);
-  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-top: env(safe-area-inset-top, 20px);
+  --safe-bottom: env(safe-area-inset-bottom, 20px);
 }
 
 body {
@@ -15,8 +15,13 @@ body {
   color: #fafafa;
   overflow: hidden;
   overscroll-behavior: none;
+  
+  /* Critical Mobile Fixes */
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
+  height: 100dvh; /* Dynamic Viewport Height handles address bars correctly */
+  width: 100vw;
+  box-sizing: border-box;
 }
 
 @keyframes aurora {
@@ -35,11 +40,11 @@ body {
   user-select: none;
 }
 
-html, body {
-  position: fixed;
-  overflow: hidden;
+#root {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Glassmorphism Utilities */
@@ -84,7 +89,7 @@ html, body {
 }
 
 .animate-heartbeat-double {
-  animation: heartbeat-double 0.85s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  animation: heartbeat-double 1s infinite cubic-bezier(0.4, 0, 0.6, 1);
 }
 
 @keyframes ecg-scan {

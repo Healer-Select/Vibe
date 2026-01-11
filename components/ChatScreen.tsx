@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact, UserProfile, VibeSignal } from '../types';
-import { ChevronLeft, Send, ShieldCheck, Trash2, Clock } from 'lucide-react';
+import { ChevronLeft, Send, ShieldCheck, Trash2, Clock, Smile } from 'lucide-react';
 import { decryptMessage } from '../constants';
 
 interface Props {
@@ -19,9 +19,12 @@ interface ChatMessage {
   timestamp: number;
 }
 
+const COMMON_EMOJIS = ['❤️', '😘', '🥺', '🫂', '✨', '🔥', '💖', '🥰', '🌙', '🏠', '🔐', '🌊'];
+
 const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, incomingMessage }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -78,9 +81,14 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
     
     setMessages(prev => [...prev, localMessage]);
     setInputText('');
+    setShowEmojis(false);
     
     // Trigger parent to encrypt and send
     onSendMessage(textToSend);
+  };
+
+  const addEmoji = (emoji: string) => {
+      setInputText(prev => prev + emoji);
   };
 
   return (
@@ -93,14 +101,13 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
             <div>
                 <h1 className="text-lg font-outfit font-semibold text-white">{contact.name}</h1>
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
                         <ShieldCheck size={10} className="text-emerald-500" />
-                        <span className="text-[9px] uppercase tracking-widest text-emerald-500/80 font-bold">Encrypted</span>
+                        <span className="text-[9px] uppercase tracking-widest text-emerald-500 font-bold">E2E Encrypted</span>
                     </div>
-                    <span className="text-zinc-700 text-[9px]">•</span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">
                         <Clock size={10} className="text-rose-500" />
-                        <span className="text-[9px] uppercase tracking-widest text-rose-500/80 font-bold">5m Auto-Delete</span>
+                        <span className="text-[9px] uppercase tracking-widest text-rose-500 font-bold">5m Delete</span>
                     </div>
                 </div>
             </div>
@@ -114,12 +121,18 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" onClick={() => setShowEmojis(false)}>
         {messages.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30 pointer-events-none">
+            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30 pointer-events-none px-6">
                 <ShieldCheck size={64} className="text-zinc-600 mb-4" />
-                <p className="text-zinc-500 text-sm text-center max-w-xs">Messages are encrypted and not stored on any server.</p>
-                <p className="text-rose-500/70 text-xs mt-2 font-mono">History clears every 5 mins</p>
+                <h3 className="text-zinc-400 font-semibold mb-2">Private & Secure</h3>
+                <p className="text-zinc-500 text-sm text-center max-w-xs leading-relaxed">
+                    Messages are encrypted on your device. Only you and {contact.name} can read them. 
+                </p>
+                <div className="mt-4 flex flex-col items-center gap-2">
+                     <p className="text-rose-500/70 text-xs font-mono bg-rose-500/10 px-3 py-1 rounded-full">Chat history clears every 5 mins</p>
+                     <p className="text-emerald-500/70 text-xs font-mono bg-emerald-500/10 px-3 py-1 rounded-full">No server storage</p>
+                </div>
             </div>
         )}
         
@@ -140,8 +153,25 @@ const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, inc
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-zinc-950 border-t border-white/5">
+      <div className="p-4 bg-zinc-950 border-t border-white/5 relative z-20">
+        {showEmojis && (
+            <div className="absolute bottom-full left-4 mb-2 p-2 bg-zinc-900 border border-white/10 rounded-2xl grid grid-cols-6 gap-2 shadow-xl animate-in slide-in-from-bottom-2">
+                {COMMON_EMOJIS.map(emoji => (
+                    <button key={emoji} onClick={() => addEmoji(emoji)} className="p-2 hover:bg-white/10 rounded-lg text-xl transition-colors">
+                        {emoji}
+                    </button>
+                ))}
+            </div>
+        )}
+
         <div className="flex items-center gap-3">
+            <button 
+                onClick={() => setShowEmojis(!showEmojis)}
+                className={`p-3 rounded-full transition-colors ${showEmojis ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-white'}`}
+            >
+                <Smile size={24} />
+            </button>
+            
             <input 
                 type="text" 
                 value={inputText}

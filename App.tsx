@@ -210,18 +210,24 @@ const App: React.FC = () => {
       // Handle Chat Messages Distinctly
       if (vibe.type === 'chat') {
           setIncomingChatMessage(vibe);
+          setIncomingVibe(vibe); // Also trigger receiver overlay for chat notifications
           if (screen !== AppScreen.CHAT) {
              triggerHaptic([50, 50]);
           }
       } 
-      // Handle specialized modes (Draw, Breathe, Heartbeat, Game) without full screen takeover if we are in Vibing
+      // Handle specialized modes (Draw, Breathe, Heartbeat, Game)
       else if (['draw', 'breathe', 'heartbeat', 'game-matrix'].includes(vibe.type)) {
-          setIncomingVibe(vibe); // Pass to VibingScreen to render
+          setIncomingVibe(vibe); 
           
           if (vibe.type === 'heartbeat') {
-              triggerHaptic([50, 100, 50]);
+              // Heartbeat stops if count is 0 (signal to stop)
+              if (vibe.count === 0) {
+                // handled by VibingScreen effect usually, but good to know
+              } else {
+                 triggerHaptic([50, 100, 50]);
+              }
           } else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') {
-              triggerHaptic([50, 50, 50, 50]); // Attention grabber for game
+              triggerHaptic([50, 50, 50, 50]); 
           } else {
               triggerHaptic(20);
           }
@@ -265,7 +271,7 @@ const App: React.FC = () => {
          });
       }
 
-      // Clear standard signals after 5s, but specialized modes might need different handling
+      // Clear signal after delay
       if (vibe.type !== 'chat') {
         setTimeout(() => setIncomingVibe(null), 5000);
       }
@@ -355,8 +361,28 @@ const App: React.FC = () => {
     setScreen(AppScreen.DASHBOARD);
   };
 
+  // Determine if we should show the global overlay
+  const shouldShowOverlay = () => {
+    if (!incomingVibe) return false;
+    
+    // If we are NOT in Vibing, always show (unless it's chat in chat screen)
+    if (screen !== AppScreen.VIBING) {
+        if (screen === AppScreen.CHAT && incomingVibe.type === 'chat') return false;
+        return true;
+    }
+
+    // If we ARE in Vibing screen:
+    // Don't show overlay for the complex modes because VibingScreen handles them internally
+    if (['draw', 'heartbeat', 'breathe', 'game-matrix'].includes(incomingVibe.type)) {
+        return false;
+    }
+    
+    // Show overlay for 'tap', 'hold', 'pattern', 'chat' (so you see whispers even while Vibing)
+    return true;
+  };
+
   return (
-    <div className="min-h-screen w-full flex flex-col no-select">
+    <div className="min-h-screen h-full w-full flex flex-col no-select">
       {screen === AppScreen.SETUP && <SetupScreen onComplete={handleSetupComplete} />}
       {screen === AppScreen.DASHBOARD && user && (
         <Dashboard 
@@ -399,10 +425,7 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Only show VibeReceiver if we are NOT in the Vibing screen (because Vibing screen handles it internally now for immersion) 
-          OR if it is a standard message. 
-      */}
-      {incomingVibe && screen !== AppScreen.VIBING && (
+      {shouldShowOverlay() && incomingVibe && (
           <VibeReceiver vibe={incomingVibe} contacts={contacts} />
       )}
     </div>

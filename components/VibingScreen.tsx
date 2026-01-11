@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeType, VibePattern, VibeSignal } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info, Play, Pause } from 'lucide-react';
 import { triggerHaptic, generateId } from '../constants';
 
 interface Props {
@@ -81,13 +81,13 @@ const VibingScreen: React.FC<Props> = ({
     heartbeat: {
       title: "Shared Heartbeat",
       question: "Can I hold your hand from miles away?",
-      answer: "Yes. This creates a live connection. Leave it running to feel their presence pulsing in the background, just like holding hands. 💓🤝",
+      answer: "Yes. Use the Play/Pause button to start. When active, both phones pulse in sync. If one stops, both stop. 💓🤝",
       color: "text-rose-400"
     },
     draw: {
       title: "Touch Canvas",
       question: "What does a thought look like?",
-      answer: "Trace your finger to draw. Your partner sees your strokes appear instantly. The ink fades quickly—art made only for this moment. 🎨⏳",
+      answer: "Trace your finger to draw. Your strokes appear instantly on their screen and slowly fade away, making each moment fleeting. 🎨⏳",
       color: "text-fuchsia-400"
     },
     breathe: {
@@ -99,7 +99,7 @@ const VibingScreen: React.FC<Props> = ({
     matrix: {
       title: "Telepathy Game",
       question: "Are we thinking the same thing?",
-      answer: "A test of intuition. Try to pick the exact same tile as your partner without speaking. If you match, your connection is confirmed. 🔮🧩",
+      answer: "A test of intuition. Try to pick the exact same tile as your partner without speaking. If you match, you'll feel a long vibration! 🔮🧩",
       color: "text-cyan-400"
     }
   };
@@ -123,24 +123,17 @@ const VibingScreen: React.FC<Props> = ({
                     ctx.arc(p.x * window.innerWidth, p.y * window.innerHeight, 5, 0, Math.PI * 2);
                     ctx.fill();
                 });
-                // Fade effect
-                setTimeout(() => {
-                    if (canvasRef.current) {
-                        const ctx = canvasRef.current.getContext('2d');
-                        if (ctx) {
-                            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-                            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                        }
-                    }
-                }, 100);
             }
         }
     } else if (incomingVibe.type === 'heartbeat') {
         if (mode !== 'heartbeat') setMode('heartbeat');
-        setIsHeartbeatActive(true);
-        // Auto-stop receiving visual after 2.5s if no new signal comes
-        const t = setTimeout(() => setIsHeartbeatActive(false), 2500);
-        return () => clearTimeout(t);
+        
+        // Check if this is a stop signal (we use count=0 as a convention for STOP)
+        if (incomingVibe.count === 0) {
+            setIsHeartbeatActive(false);
+        } else {
+            setIsHeartbeatActive(true);
+        }
     } else if (incomingVibe.type === 'game-matrix') {
         setMode('matrix');
         if (incomingVibe.matrixAction === 'invite' && incomingVibe.gridDifficulty) {
@@ -170,14 +163,25 @@ const VibingScreen: React.FC<Props> = ({
         onSendVibe('heartbeat', undefined, 1);
         triggerHaptic([50, 100, 50]);
         
-        // Loop Pulse (approx 70bpm = 850ms)
+        // Loop Pulse - Slower rhythm per request (approx 60bpm = 1000ms)
         interval = setInterval(() => {
             onSendVibe('heartbeat', undefined, 1);
             triggerHaptic([50, 100, 50]);
-        }, 850);
+        }, 1000);
     }
     return () => clearInterval(interval);
   }, [mode, isHeartbeatActive]);
+
+  const toggleHeartbeat = () => {
+      if (isHeartbeatActive) {
+          // Send STOP signal
+          onSendVibe('heartbeat', undefined, 0); // 0 means STOP
+          setIsHeartbeatActive(false);
+      } else {
+          // START
+          setIsHeartbeatActive(true);
+      }
+  };
 
   // Handle Breathe Animation & Vibration Loop
   useEffect(() => {
@@ -294,12 +298,28 @@ const VibingScreen: React.FC<Props> = ({
     }
   };
 
+  // Continuous Canvas Fading Logic
   useEffect(() => {
-      // Setup canvas size
-      if (mode === 'draw' && canvasRef.current) {
-          canvasRef.current.width = window.innerWidth;
-          canvasRef.current.height = window.innerHeight;
+      let interval: NodeJS.Timeout;
+      if (mode === 'draw') {
+          // Setup canvas size
+          if (canvasRef.current) {
+            canvasRef.current.width = window.innerWidth;
+            canvasRef.current.height = window.innerHeight;
+          }
+
+          // Fade Loop: Draws a semi-transparent black rect over the canvas every 100ms
+          interval = setInterval(() => {
+              if (canvasRef.current) {
+                  const ctx = canvasRef.current.getContext('2d');
+                  if (ctx) {
+                      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Adjust opacity for fade speed
+                      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                  }
+              }
+          }, 100);
       }
+      return () => clearInterval(interval);
   }, [mode]);
 
   // Matrix Game Logic
@@ -318,6 +338,18 @@ const VibingScreen: React.FC<Props> = ({
           setMatrixState('waiting');
       }
   };
+
+  // Matrix Result Effect
+  useEffect(() => {
+    if (matrixState === 'result' && myMatrixSelection !== null && partnerMatrixSelection !== null) {
+        if (myMatrixSelection === partnerMatrixSelection) {
+            // MATCH FOUND! Long vibration
+            triggerHaptic(1000); 
+        } else {
+            triggerHaptic([100, 100]); // Short double fail
+        }
+    }
+  }, [matrixState, myMatrixSelection, partnerMatrixSelection]);
 
   const startMatrixGame = () => {
       setMatrixState('playing');
@@ -371,19 +403,18 @@ const VibingScreen: React.FC<Props> = ({
         // FLAMINGO THEME
         return (
             <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in duration-300 relative">
-                 <button onClick={() => { setIsHeartbeatActive(false); setMode('default'); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white">
+                 <button onClick={() => { setIsHeartbeatActive(false); onSendVibe('heartbeat', undefined, 0); setMode('default'); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white">
                     <X size={24} />
                  </button>
 
                 <p className="text-orange-200/60 uppercase tracking-widest text-xs font-bold mb-12">
-                    {isHeartbeatActive ? 'Sending Heartbeat...' : 'Tap to Start/Stop'}
+                    {isHeartbeatActive ? 'Sending Heartbeat...' : 'Heartbeat Paused'}
                 </p>
-                <button 
-                    onClick={() => setIsHeartbeatActive(!isHeartbeatActive)}
-                    className={`w-72 h-72 rounded-full flex items-center justify-center relative overflow-hidden transition-all duration-300 border-4 backdrop-blur-md
+                <div 
+                    className={`w-72 h-72 rounded-full flex items-center justify-center relative overflow-hidden transition-all duration-300 border-4 backdrop-blur-md mb-8
                         ${isHeartbeatActive 
                             ? 'bg-rose-500/20 border-rose-400 animate-heartbeat-double shadow-[0_0_50px_rgba(251,113,133,0.4)]' 
-                            : 'bg-white/5 border-white/10 hover:border-orange-400/50'
+                            : 'bg-white/5 border-white/10'
                         }`}
                 >
                     {/* ECG Background Layer - FLAMINGO COLORS */}
@@ -410,6 +441,14 @@ const VibingScreen: React.FC<Props> = ({
                             className={`transition-all duration-300 ${isHeartbeatActive ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)] scale-110' : 'fill-transparent text-white/20'}`} 
                          />
                     </div>
+                </div>
+
+                {/* PLAY / PAUSE CONTROLS */}
+                <button 
+                    onClick={toggleHeartbeat}
+                    className={`p-6 rounded-full transition-all duration-300 ${isHeartbeatActive ? 'bg-rose-500 text-white shadow-[0_0_30px_rgba(244,63,94,0.4)]' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                >
+                    {isHeartbeatActive ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
                 </button>
             </div>
         )
