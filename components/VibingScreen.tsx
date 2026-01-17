@@ -160,7 +160,7 @@ const VibingScreen: React.FC<Props> = ({
 
   // Handle Heartbeat Loop (Sender)
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
+    let interval: number;
     
     if (mode === 'heartbeat' && isHeartbeatActive) {
         heartbeatCountRef.current = 0;
@@ -169,19 +169,19 @@ const VibingScreen: React.FC<Props> = ({
             if (heartbeatCountRef.current > 10) {
                 setIsHeartbeatActive(false);
                 onSendVibe('heartbeat', undefined, 0); // AUTO STOP
-                clearInterval(interval);
+                window.clearInterval(interval);
                 return;
             }
             onSendVibe('heartbeat', undefined, heartbeatCountRef.current);
             triggerHaptic([50, 100, 50]);
         };
         beat();
-        interval = setInterval(beat, 1000);
+        interval = window.setInterval(beat, 1000);
     }
     
     // CLEANUP: If I leave screen or component unmounts while beating, SEND STOP
     return () => {
-        clearInterval(interval);
+        window.clearInterval(interval);
         if (mode === 'heartbeat' && isHeartbeatActive) {
              onSendVibe('heartbeat', undefined, 0);
         }
@@ -208,8 +208,8 @@ const VibingScreen: React.FC<Props> = ({
   };
 
   useEffect(() => {
-      let interval: ReturnType<typeof setInterval>;
-      let vibrationTimeout: ReturnType<typeof setTimeout>;
+      let interval: number;
+      let vibrationTimeout: number;
       
       if (mode === 'breathe' && isBreatheActive) {
           const config = {
@@ -221,16 +221,16 @@ const VibingScreen: React.FC<Props> = ({
           const runCycle = () => {
              setBreathePhase('in');
              triggerHaptic(currentConfig.inhale); 
-             vibrationTimeout = setTimeout(() => {
+             vibrationTimeout = window.setTimeout(() => {
                  setBreathePhase('out');
              }, currentConfig.inhale);
           };
           runCycle();
-          interval = setInterval(runCycle, currentConfig.total);
+          interval = window.setInterval(runCycle, currentConfig.total);
       }
       return () => {
-          clearInterval(interval);
-          clearTimeout(vibrationTimeout);
+          window.clearInterval(interval);
+          window.clearTimeout(vibrationTimeout);
       };
   }, [mode, breatheVariant, isBreatheActive]);
 
@@ -243,7 +243,7 @@ const VibingScreen: React.FC<Props> = ({
     setStatus('holding');
     pressStartTime.current = Date.now();
     if (tapTimer.current) {
-      clearTimeout(tapTimer.current);
+      window.clearTimeout(tapTimer.current);
       tapTimer.current = null;
     }
     triggerHaptic(60);
@@ -307,13 +307,13 @@ const VibingScreen: React.FC<Props> = ({
   };
 
   useEffect(() => {
-      let interval: ReturnType<typeof setInterval>;
+      let interval: number;
       if (mode === 'draw') {
           if (canvasRef.current) {
             canvasRef.current.width = window.innerWidth;
             canvasRef.current.height = window.innerHeight;
           }
-          interval = setInterval(() => {
+          interval = window.setInterval(() => {
               if (canvasRef.current) {
                   const ctx = canvasRef.current.getContext('2d');
                   if (ctx) {
@@ -323,7 +323,7 @@ const VibingScreen: React.FC<Props> = ({
               }
           }, 100);
       }
-      return () => clearInterval(interval);
+      return () => window.clearInterval(interval);
   }, [mode]);
 
   const handleMatrixTileClick = (index: number) => {

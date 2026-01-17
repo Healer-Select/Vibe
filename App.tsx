@@ -18,6 +18,10 @@ const App: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   
+  // Refs for State (Critical for Event Listeners)
+  const contactsRef = useRef<Contact[]>([]);
+  const userRef = useRef<UserProfile | null>(null);
+
   // Signals
   const [incomingVibe, setIncomingVibe] = useState<VibeSignal | null>(null);
   const [incomingChatMessage, setIncomingChatMessage] = useState<VibeSignal | null>(null);
@@ -31,6 +35,10 @@ const App: React.FC = () => {
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const wakeLockRef = useRef<any>(null);
 
+  // Sync Refs
+  useEffect(() => { contactsRef.current = contacts; }, [contacts]);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   // --- INITIALIZATION ---
   useEffect(() => {
     const initApp = async () => {
@@ -43,20 +51,20 @@ const App: React.FC = () => {
       requestForToken().then((token) => {
         if (token && currentUser && currentUser.fcmToken !== token) {
            currentUser.fcmToken = token;
-           setUser(currentUser);
+           setUser(currentUser); // Ref updates via useEffect
            localStorage.setItem('vibe_user', JSON.stringify(currentUser));
            initRealtime(currentUser.pairCode, token);
         }
       }).catch(err => console.warn("Token background fetch failed", err));
       
       if (currentUser) {
-        setUser(currentUser);
+        setUser(currentUser); // Ref updates via useEffect
         setScreen(AppScreen.DASHBOARD);
         initRealtime(currentUser.pairCode, currentUser.fcmToken);
       }
       
       const parsedContacts = savedContacts ? JSON.parse(savedContacts) : [];
-      setContacts(parsedContacts);
+      setContacts(parsedContacts); // Ref updates via useEffect
       if (savedPatterns) setCustomPatterns(JSON.parse(savedPatterns));
     };
 
@@ -128,12 +136,14 @@ const App: React.FC = () => {
 
       const myChannel = ably.channels.get(`vibe-${myCode}`);
       myChannel.subscribe('vibration', (message) => {
+        // Pass Refs to avoid stale closures
         receiveVibe(message.data as VibeSignal, myCode);
       });
 
       myChannel.presence.enter({ fcmToken: myToken });
 
       const refreshPresence = () => {
+        // Use Ref or localStorage for presence to ensure we check against current contacts
         const currentContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
         let contactsUpdated = false;
 
@@ -172,19 +182,28 @@ const App: React.FC = () => {
 
   // --- GATEKEEPER: THE CORE ROUTING LOGIC ---
   const receiveVibe = (vibe: VibeSignal, myCode: string) => {
+    const currentUser = userRef.current;
+    const currentContacts = contactsRef.current;
+
     // 1. Identity Check
-    if (user) {
-        if (vibe.senderUniqueId && vibe.senderUniqueId === user.id) return;
-        if (!vibe.senderUniqueId && vibe.senderId === user.pairCode) return;
+    if (currentUser) {
+        // Prevent echo if testing on same device/tab sharing ID
+        if (vibe.senderUniqueId && vibe.senderUniqueId === currentUser.id) return;
+        // Fallback check
+        if (!vibe.senderUniqueId && vibe.senderId === currentUser.pairCode) return;
     }
     
-    const contact = contacts.find((c: Contact) => c.pairCode === vibe.senderId);
-    if (!contact && vibe.senderId !== 'SYSTEM') return; // Only process known contacts or system
+    // Check against LATEST contacts
+    const contact = currentContacts.find((c: Contact) => c.pairCode === vibe.senderId);
+    
+    if (!contact && vibe.senderId !== 'SYSTEM') {
+        console.warn("Received vibe from unknown sender:", vibe.senderId);
+        return; 
+    }
 
     // 2. Chat Routing (Silent, No Notification)
     if (vibe.type === 'chat' || vibe.type === 'chat-clear') {
         setIncomingChatMessage(vibe);
-        // STRICT: No haptic, No notification for chat
         return;
     }
 
@@ -197,11 +216,10 @@ const App: React.FC = () => {
             if ((vibe.count || 0) <= 10) triggerHaptic([50, 100, 50]);
         }
         setIncomingVibe(vibe);
-        // STRICT: No notification for heartbeat pulses
         return; 
     }
 
-    // 4. Data Routing (Draw/Breathe) - STRICT ISOLATION
+    // 4. Data Routing (Draw/Breathe)
     if (['draw', 'breathe'].includes(vibe.type)) {
         // Invite Logic
         const isInvite = (vibe.type === 'draw' && (!vibe.points || vibe.points.length === 0)) ||
@@ -212,10 +230,10 @@ const App: React.FC = () => {
             triggerHaptic(50);
             sendNotification(vibe); // Notify for Invite
         } else {
-            // Raw Data -> Only if on Vibing Screen
-            if (screen === AppScreen.VIBING) {
-                setIncomingVibe(vibe);
-            }
+            // Raw Data -> Only if on Vibing Screen. 
+            // We can't check 'screen' state easily here without another ref, 
+            // but passing it to setIncomingVibe allows the child component to decide.
+            setIncomingVibe(vibe);
         }
         return;
     }
@@ -226,7 +244,7 @@ const App: React.FC = () => {
             setIncomingVibe(vibe);
             triggerHaptic(50);
             sendNotification(vibe); // Notify for Invite
-        } else if (screen === AppScreen.VIBING) {
+        } else {
             setIncomingVibe(vibe);
         }
         return;
