@@ -1,5 +1,70 @@
 
-export type VibeType = 'tap' | 'hold' | 'pattern' | 'chat' | 'chat-clear' | 'heartbeat' | 'draw' | 'breathe' | 'game-matrix';
+export type VibeCategory = 'heartbeat' | 'draw' | 'breathe' | 'matrix' | 'touch' | 'chat';
+export type VibeAction = 'invite' | 'accept' | 'data' | 'stop' | 'sync' | 'text' | 'clear' | 'select' | 'reveal' | 'reset';
+
+// Base interface for all signals
+interface BaseSignal {
+  id: string;
+  senderId: string; // The Pair Code
+  senderUniqueId?: string; // Device UUID
+  senderName: string;
+  timestamp: number;
+  category: VibeCategory;
+  action: VibeAction;
+}
+
+// 1. Touch Signals (Tap, Hold, Pattern)
+export interface TouchSignal extends BaseSignal {
+  category: 'touch';
+  action: 'data';
+  touchType: 'tap' | 'hold' | 'pattern';
+  count?: number; 
+  duration?: number; 
+  patternName?: string; 
+  patternEmoji?: string; 
+  patternData?: number[]; 
+}
+
+// 2. Chat Signals
+export interface ChatSignal extends BaseSignal {
+  category: 'chat';
+  action: 'text' | 'clear';
+  payload?: string; // Encrypted text
+}
+
+// 3. Heartbeat Signals
+export interface HeartbeatSignal extends BaseSignal {
+  category: 'heartbeat';
+  action: 'invite' | 'data' | 'stop';
+  bpm?: number;
+  count?: number; // 1-10 sequence
+}
+
+// 4. Drawing Signals
+export interface DrawSignal extends BaseSignal {
+  category: 'draw';
+  action: 'invite' | 'data' | 'stop';
+  points?: { x: number, y: number }[]; 
+  color?: string; 
+}
+
+// 5. Breathe Signals
+export interface BreatheSignal extends BaseSignal {
+  category: 'breathe';
+  action: 'invite' | 'sync' | 'stop';
+  variant?: 'calm' | 'meditation' | 'sad';
+}
+
+// 6. Matrix Game Signals
+export interface MatrixSignal extends BaseSignal {
+  category: 'matrix';
+  action: 'invite' | 'select' | 'reveal' | 'reset';
+  difficulty?: 'easy' | 'medium' | 'hard';
+  selectionIndex?: number;
+}
+
+// Discriminated Union
+export type VibeSignal = TouchSignal | ChatSignal | HeartbeatSignal | DrawSignal | BreatheSignal | MatrixSignal;
 
 export interface VibePattern {
   id: string;
@@ -8,30 +73,6 @@ export interface VibePattern {
   data: number[];
   isPreset?: boolean;
   defaultMessage?: string;
-}
-
-export interface VibeSignal {
-  id: string;
-  senderId: string; // This is the Pair Code (e.g. "ALEX")
-  senderUniqueId?: string; // This is the UUID (e.g. "a1b2...") - Unique per device
-  senderName: string;
-  type: VibeType;
-  text?: string; // Encrypted string if type is 'chat'
-  count?: number; 
-  duration?: number; 
-  patternName?: string; 
-  patternEmoji?: string; 
-  patternData?: number[]; 
-  points?: { x: number, y: number }[]; // For drawing
-  color?: string; // For drawing color
-  breatheVariant?: 'calm' | 'meditation' | 'sad'; // For breathe mode
-  
-  // Matrix Game Props
-  matrixAction?: 'invite' | 'select' | 'reveal' | 'reset';
-  gridDifficulty?: 'easy' | 'medium' | 'hard';
-  selectionIndex?: number;
-  
-  timestamp: number;
 }
 
 export interface Contact {

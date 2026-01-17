@@ -1,15 +1,13 @@
 
 import { VibePattern } from './types';
 
-// Updated to "Love and Light" Gradients
-// Vibrant, distinct colors for contacts and UI themes
 export const COLORS = [
-  'bg-gradient-to-br from-rose-400 to-orange-400',    // Flamingo
-  'bg-gradient-to-br from-fuchsia-500 to-purple-600', // Magenta
-  'bg-gradient-to-br from-cyan-400 to-blue-500',      // Cyan
-  'bg-gradient-to-br from-emerald-400 to-teal-500',   // Mint
-  'bg-gradient-to-br from-amber-300 to-orange-500',   // Sunshine
-  'bg-gradient-to-br from-indigo-400 to-violet-600'   // Twilight
+  'bg-gradient-to-br from-rose-400 to-orange-400',
+  'bg-gradient-to-br from-fuchsia-500 to-purple-600',
+  'bg-gradient-to-br from-cyan-400 to-blue-500',
+  'bg-gradient-to-br from-emerald-400 to-teal-500',
+  'bg-gradient-to-br from-amber-300 to-orange-500',
+  'bg-gradient-to-br from-indigo-400 to-violet-600'
 ];
 
 export const PRESET_PATTERNS: VibePattern[] = [];
@@ -20,13 +18,26 @@ export const getRandomColor = () => {
   return COLORS[array[0] % COLORS.length];
 };
 
+// --- VISUAL HAPTIC FALLBACK ---
 export const triggerHaptic = (pattern: number | number[]) => {
-  if ('vibrate' in navigator) {
+  // 1. Try Native Vibration
+  const hasVibration = 'vibrate' in navigator && typeof navigator.vibrate === 'function';
+  let success = false;
+  
+  if (hasVibration) {
     try {
-      navigator.vibrate(pattern);
+      success = navigator.vibrate(pattern);
     } catch (e) {
-      console.warn('Haptic feedback failed', e);
+      // Ignore security errors in background
     }
+  }
+
+  // 2. iOS / Unsupported Fallback: Dispatch Event for Visual Shake
+  if (!success || !hasVibration) {
+    const event = new CustomEvent('vibe-visual-haptic', { 
+      detail: { intensity: Array.isArray(pattern) ? 'heavy' : 'light' } 
+    });
+    window.dispatchEvent(event);
   }
 };
 
@@ -51,15 +62,26 @@ export const sanitizeInput = (input: string) => {
   return input.replace(/[^a-zA-Z0-9\s\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, '').trim();
 };
 
-// --- Encryption Helpers ---
+// --- SECURITY & CRYPTOGRAPHY ---
+
+// Hash function for channel obfuscation
+export const getChannelName = async (pairCode: string): Promise<string> => {
+    const msgBuffer = new TextEncoder().encode(pairCode + "-vibe-channel-salt-v1");
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    // Return first 16 chars of hash
+    return "vibe-" + hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 24);
+};
 
 const getCryptoKey = async (code1: string, code2: string) => {
-  // Create a consistent seed from the two pair codes (alphabetical order)
-  const seed = [code1, code2].sort().join('-');
+  // DYNAMIC SALT: Sort codes alphabetically so both peers derive the same salt
+  // without exchanging it.
+  const dynamicSalt = [code1, code2].sort().join(':');
   const encoder = new TextEncoder();
+  
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
-    encoder.encode(seed),
+    encoder.encode(dynamicSalt), // Use the pair combo as the seed
     { name: 'PBKDF2' },
     false,
     ['deriveBits', 'deriveKey']
@@ -68,8 +90,8 @@ const getCryptoKey = async (code1: string, code2: string) => {
   return window.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: encoder.encode('vibe-salt-static'), // In a real app, salt should be dynamic
-      iterations: 100000,
+      salt: encoder.encode(dynamicSalt + "static-app-pepper"), // Salt + Pepper
+      iterations: 300000, // OWASP Mobile Recommendation (High Security)
       hash: 'SHA-256'
     },
     keyMaterial,
@@ -82,7 +104,7 @@ const getCryptoKey = async (code1: string, code2: string) => {
 export const encryptMessage = async (text: string, myCode: string, theirCode: string): Promise<string> => {
   try {
     const key = await getCryptoKey(myCode, theirCode);
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const iv = window.crypto.getRandomValues(new Uint8Array(12)); // Unique IV per message
     const encoded = new TextEncoder().encode(text);
     
     const encrypted = await window.crypto.subtle.encrypt(
@@ -91,13 +113,11 @@ export const encryptMessage = async (text: string, myCode: string, theirCode: st
       encoded
     );
 
-    // Combine IV and data for transport
     const encryptedArray = new Uint8Array(encrypted);
     const combined = new Uint8Array(iv.length + encryptedArray.length);
     combined.set(iv);
     combined.set(encryptedArray, iv.length);
     
-    // Convert to Base64
     return btoa(String.fromCharCode(...combined));
   } catch (e) {
     console.error("Encryption failed", e);
@@ -109,7 +129,6 @@ export const decryptMessage = async (cipherText: string, myCode: string, theirCo
   try {
     const key = await getCryptoKey(myCode, theirCode);
     
-    // Convert Base64 back to Uint8Array
     const binaryString = atob(cipherText);
     const combined = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
@@ -127,7 +146,8 @@ export const decryptMessage = async (cipherText: string, myCode: string, theirCo
     
     return new TextDecoder().decode(decrypted);
   } catch (e) {
-    console.error("Decryption failed", e);
-    return "🔒 Could not decrypt message";
+    // Fail silently in UI, log only to console
+    console.error("Decryption failed - Key mismatch or corrupt data");
+    return "🔒 Decryption Error";
   }
 };
