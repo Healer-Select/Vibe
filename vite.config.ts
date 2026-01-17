@@ -13,7 +13,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-utils': ['lucide-react', 'ably'],
-          'vendor-firebase': ['firebase/app', 'firebase/messaging', 'firebase/analytics']
+          'vendor-firebase': ['firebase/app', 'firebase/messaging']
         }
       }
     }

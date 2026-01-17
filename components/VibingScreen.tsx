@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeType, VibePattern, VibeSignal } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, Smile, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info, Play, Pause, Square } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Loader2, MessageCircle, Activity, PenTool, Wind, Grid3X3, Trophy, BrainCircuit, Info, Play, Pause, Square } from 'lucide-react';
 import { triggerHaptic, generateId } from '../constants';
 
 interface Props {
@@ -102,7 +102,7 @@ const VibingScreen: React.FC<Props> = ({
     }
   };
 
-  const LONG_PRESS_THRESHOLD = 500; // Increased threshold to prevent accidental holds
+  const LONG_PRESS_THRESHOLD = 500; 
   const TAP_WINDOW = 600;
 
   // React to Incoming Vibes
@@ -159,37 +159,33 @@ const VibingScreen: React.FC<Props> = ({
   }, [incomingVibe, mode]);
 
   // Handle Heartbeat Loop (Sender)
-  // FIXED: Limit to 10 beats
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     
     if (mode === 'heartbeat' && isHeartbeatActive) {
-        // Reset count on start
         heartbeatCountRef.current = 0;
-        
         const beat = () => {
             heartbeatCountRef.current += 1;
-            
-            // Check limit
             if (heartbeatCountRef.current > 10) {
-                // STOP automatically
                 setIsHeartbeatActive(false);
-                onSendVibe('heartbeat', undefined, 0);
+                onSendVibe('heartbeat', undefined, 0); // AUTO STOP
                 clearInterval(interval);
                 return;
             }
-
-            onSendVibe('heartbeat', undefined, 1);
+            onSendVibe('heartbeat', undefined, heartbeatCountRef.current);
             triggerHaptic([50, 100, 50]);
         };
-
-        // First beat immediately
         beat();
-        
-        // Loop Pulse (60bpm)
         interval = setInterval(beat, 1000);
     }
-    return () => clearInterval(interval);
+    
+    // CLEANUP: If I leave screen or component unmounts while beating, SEND STOP
+    return () => {
+        clearInterval(interval);
+        if (mode === 'heartbeat' && isHeartbeatActive) {
+             onSendVibe('heartbeat', undefined, 0);
+        }
+    };
   }, [mode, isHeartbeatActive]);
 
   const toggleHeartbeat = () => {
@@ -206,14 +202,14 @@ const VibingScreen: React.FC<Props> = ({
         onSendVibe('breathe', undefined, 0);
         setIsBreatheActive(false);
     } else {
-        onSendVibe('breathe', undefined, 1, undefined, undefined, undefined, undefined, undefined, undefined, breatheVariant); // Invite/Start
+        onSendVibe('breathe', undefined, 1, undefined, undefined, undefined, undefined, undefined, undefined, breatheVariant); 
         setIsBreatheActive(true);
     }
   };
 
   useEffect(() => {
-      let interval: NodeJS.Timeout;
-      let vibrationTimeout: NodeJS.Timeout;
+      let interval: ReturnType<typeof setInterval>;
+      let vibrationTimeout: ReturnType<typeof setTimeout>;
       
       if (mode === 'breathe' && isBreatheActive) {
           const config = {
@@ -238,7 +234,6 @@ const VibingScreen: React.FC<Props> = ({
       };
   }, [mode, breatheVariant, isBreatheActive]);
 
-  // Handle Default Mode Touches
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (status === 'recording' || status === 'sending') return;
     const target = e.target as HTMLElement;
@@ -267,7 +262,6 @@ const VibingScreen: React.FC<Props> = ({
       onSendVibe('hold', "I am Holding u right now", undefined, duration).finally(() => setStatus('idle'));
       triggerHaptic([100, 200, 100]);
     } else {
-      // It was a tap
       tapCountRef.current += 1;
       setTapCount(tapCountRef.current);
       setStatus('tapped');
@@ -285,13 +279,12 @@ const VibingScreen: React.FC<Props> = ({
     }
   };
 
-  // Drawing Logic
   const handleDrawMove = (e: React.TouchEvent) => {
+    e.stopPropagation(); // CRITICAL FIX: Stop event from bubbling to container
     const touch = e.touches[0];
     const x = touch.clientX;
     const y = touch.clientY;
     
-    // Draw locally
     if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         if (ctx) {
@@ -302,22 +295,19 @@ const VibingScreen: React.FC<Props> = ({
         }
     }
 
-    // Add to buffer
     const normalizedPoint = { x: x / window.innerWidth, y: y / window.innerHeight };
     setDrawPoints(prev => [...prev, normalizedPoint]);
 
-    // Throttle send
     const now = Date.now();
     if (now - lastSentTime.current > 100 && drawPoints.length > 0) {
         onSendVibe('draw', undefined, undefined, undefined, undefined, undefined, undefined, [...drawPoints, normalizedPoint], drawColor);
         setDrawPoints([]);
         lastSentTime.current = now;
     }
-    // FIXED: NO HAPTIC TRIGGER HERE for drawing
   };
 
   useEffect(() => {
-      let interval: NodeJS.Timeout;
+      let interval: ReturnType<typeof setInterval>;
       if (mode === 'draw') {
           if (canvasRef.current) {
             canvasRef.current.width = window.innerWidth;
@@ -336,31 +326,19 @@ const VibingScreen: React.FC<Props> = ({
       return () => clearInterval(interval);
   }, [mode]);
 
-  // Matrix Game Logic
   const handleMatrixTileClick = (index: number) => {
       if (matrixState !== 'playing') return;
-      
       setMyMatrixSelection(index);
       triggerHaptic(50);
-      
       onSendVibe('game-matrix', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'select', matrixDifficulty, index);
-      
-      if (partnerMatrixSelection !== null) {
-          setMatrixState('result');
-      } else {
-          setMatrixState('waiting');
-      }
+      if (partnerMatrixSelection !== null) setMatrixState('result');
+      else setMatrixState('waiting');
   };
 
   useEffect(() => {
     if (matrixState === 'result' && myMatrixSelection !== null && partnerMatrixSelection !== null) {
-        if (myMatrixSelection === partnerMatrixSelection) {
-            // MATCH FOUND! Long vibration
-            triggerHaptic(1000); 
-        } else {
-            // No vibe or very subtle for fail
-            triggerHaptic([50]); 
-        }
+        if (myMatrixSelection === partnerMatrixSelection) triggerHaptic(1000); 
+        else triggerHaptic([50]); 
     }
   }, [matrixState, myMatrixSelection, partnerMatrixSelection]);
 
@@ -368,11 +346,9 @@ const VibingScreen: React.FC<Props> = ({
       setMatrixState('playing');
       setMyMatrixSelection(null);
       setPartnerMatrixSelection(null);
-      // Fixed: Send invite only
       onSendVibe('game-matrix', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'invite', matrixDifficulty);
   };
 
-  // Drum Recorder Logic
   const handleDrumStart = (e: React.SyntheticEvent) => {
     drumStartTime.current = Date.now();
     triggerHaptic(30);
@@ -391,8 +367,7 @@ const VibingScreen: React.FC<Props> = ({
 
   const renderPatternSlot = (index: number) => {
     const pattern = customPatterns[index];
-    const isEmpty = !pattern;
-    if (isEmpty) {
+    if (!pattern) {
       return (
         <button
           key={`slot-${index}`}
@@ -427,16 +402,11 @@ const VibingScreen: React.FC<Props> = ({
     );
   };
 
-  // SEND INVITATION HELPER
-  // When clicking a mode button, we send a vibe signal. 
-  // If the receiver is not in that mode, they see a "Invited to X" heart.
   const handleModeSwitch = (newMode: 'heartbeat' | 'draw' | 'breathe' | 'matrix') => {
       setMode(newMode);
-      
-      // Notify partner that I am entering this mode (Sending an Invite)
-      if (newMode === 'heartbeat') onSendVibe('heartbeat', undefined, 0); // Init
-      else if (newMode === 'draw') onSendVibe('draw', undefined, undefined, undefined, undefined, undefined, undefined, []); // Init
-      else if (newMode === 'breathe') onSendVibe('breathe', undefined, 0); // Init
+      if (newMode === 'heartbeat') onSendVibe('heartbeat', undefined, 0); 
+      else if (newMode === 'draw') onSendVibe('draw', undefined, undefined, undefined, undefined, undefined, undefined, []); 
+      else if (newMode === 'breathe') onSendVibe('breathe', undefined, 0); 
       else if (newMode === 'matrix') onSendVibe('game-matrix', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'invite', matrixDifficulty);
   };
 
@@ -489,9 +459,6 @@ const VibingScreen: React.FC<Props> = ({
                  <div className="absolute top-8 left-0 right-0 flex flex-col items-center pointer-events-none">
                      <p className="text-fuchsia-200/60 uppercase tracking-widest text-xs font-bold bg-fuchsia-500/10 px-4 py-1 rounded-full backdrop-blur border border-fuchsia-500/20">Touch to draw</p>
                  </div>
-                 <button onClick={() => setShowInfo(true)} className="absolute top-8 right-8 z-[60] w-10 h-10 flex items-center justify-center text-white/40 hover:text-white rounded-full bg-black/20 backdrop-blur">
-                    <Info size={24} />
-                 </button>
                  <div className="absolute bottom-24 left-0 right-0 flex items-center justify-center gap-4">
                     {DRAW_COLORS.map(c => (
                         <button key={c} onClick={() => setDrawColor(c)} className={`w-10 h-10 rounded-full border-2 transition-transform active:scale-90 ${drawColor === c ? 'border-white scale-125 shadow-lg shadow-fuchsia-500/30' : 'border-transparent'}`} style={{ backgroundColor: c }} />
@@ -531,12 +498,6 @@ const VibingScreen: React.FC<Props> = ({
     }
 
     if (mode === 'matrix') {
-        const difficultyConfig = {
-            easy: { rows: 3, cols: 3, size: 9 },
-            medium: { rows: 5, cols: 3, size: 15 },
-            hard: { rows: 6, cols: 3, size: 18 }
-        };
-        const config = difficultyConfig[matrixDifficulty];
         return (
             <div className="flex-1 flex flex-col items-center justify-center animate-in slide-in-from-bottom duration-500 relative w-full h-full p-4">
                  <button onClick={() => { setMode('default'); onSendVibe('game-matrix', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'reset'); }} className="absolute top-2 right-2 p-2 glass-button rounded-full text-white/60 hover:text-white z-10">
@@ -549,16 +510,6 @@ const VibingScreen: React.FC<Props> = ({
                              <BrainCircuit size={40} className="text-cyan-300" />
                          </div>
                          <h2 className="text-2xl font-outfit font-bold text-white">Telepathy Test</h2>
-                         <p className="text-white/60 text-sm">
-                             Try to pick the same tile as your partner without communicating.
-                             <br/><br/>
-                             If you match, your phones will sync.
-                         </p>
-                         <div className="grid grid-cols-3 gap-2 w-full pt-4">
-                             {(['easy', 'medium', 'hard'] as const).map(diff => (
-                                 <button key={diff} onClick={() => setMatrixDifficulty(diff)} className={`py-3 rounded-xl text-xs uppercase font-bold tracking-wider border transition-all ${matrixDifficulty === diff ? 'bg-cyan-500/20 border-cyan-400 text-cyan-100' : 'glass-button text-white/40'}`}>{diff}</button>
-                             ))}
-                         </div>
                          <button onClick={startMatrixGame} className="w-full bg-cyan-100/90 text-cyan-900 py-4 rounded-2xl font-bold mt-4 shadow-lg hover:bg-white transition-colors">
                              Start Game
                          </button>
@@ -570,15 +521,15 @@ const VibingScreen: React.FC<Props> = ({
                          <h3 className="text-xs uppercase tracking-widest text-cyan-300 font-bold mb-6">
                             {matrixState === 'waiting' ? 'Waiting for partner...' : matrixState === 'result' ? 'Result' : 'Pick a Tile'}
                          </h3>
-                         <div className="grid gap-2 w-full aspect-[3/5]" style={{ gridTemplateColumns: `repeat(${config.cols}, 1fr)`, gridTemplateRows: `repeat(${config.rows}, 1fr)` }}>
-                             {Array.from({ length: config.size }).map((_, i) => {
+                         <div className="grid gap-2 w-full aspect-[3/5]" style={{ gridTemplateColumns: `repeat(3, 1fr)`, gridTemplateRows: `repeat(3, 1fr)` }}>
+                             {Array.from({ length: 9 }).map((_, i) => {
                                  const isSelected = myMatrixSelection === i;
                                  const isPartnerSelected = partnerMatrixSelection === i && matrixState === 'result';
                                  let bgClass = "glass-button border-white/10";
                                  if (matrixState === 'result') {
-                                     if (isSelected && isPartnerSelected) bgClass = "bg-cyan-400 border-cyan-300 shadow-[0_0_20px_#22d3ee] animate-pulse"; // Match
-                                     else if (isSelected) bgClass = "bg-rose-400 border-rose-300"; // My mismatch
-                                     else if (isPartnerSelected) bgClass = "bg-purple-400 border-purple-300"; // Partner mismatch
+                                     if (isSelected && isPartnerSelected) bgClass = "bg-cyan-400 border-cyan-300 shadow-[0_0_20px_#22d3ee] animate-pulse"; 
+                                     else if (isSelected) bgClass = "bg-rose-400 border-rose-300"; 
+                                     else if (isPartnerSelected) bgClass = "bg-purple-400 border-purple-300"; 
                                      else bgClass = "bg-white/5 opacity-10";
                                  } else {
                                      if (isSelected) bgClass = "bg-cyan-500/40 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]";
@@ -594,14 +545,9 @@ const VibingScreen: React.FC<Props> = ({
                                      <div className="flex flex-col items-center space-y-2">
                                          <Trophy size={48} className="text-amber-300 mb-2 drop-shadow-[0_0_10px_rgba(252,211,77,0.5)] animate-bounce" />
                                          <h2 className="text-3xl font-outfit font-bold text-white">Telepathy!</h2>
-                                         <p className="text-cyan-300 text-sm font-bold uppercase tracking-widest">You synced perfectly</p>
                                      </div>
                                  ) : (
                                      <div className="flex flex-col items-center space-y-2">
-                                         <div className="flex gap-4 items-center">
-                                             <div className="w-4 h-4 rounded-full bg-rose-400" /> <span className="text-xs text-white/60">You</span>
-                                             <div className="w-4 h-4 rounded-full bg-purple-400" /> <span className="text-xs text-white/60">Partner</span>
-                                         </div>
                                          <p className="text-white/60 text-lg font-medium mt-2">Not in sync this time.</p>
                                      </div>
                                  )}
@@ -627,22 +573,6 @@ const VibingScreen: React.FC<Props> = ({
             <div className="flex-1 flex flex-col items-center justify-center relative h-full">
                 <div className={`absolute inset-0 flex items-center justify-center transition-all duration-700 pointer-events-none ${isPressing ? 'opacity-100 scale-125' : 'opacity-20 scale-100'}`}>
                 <div className={`w-80 h-80 rounded-full blur-[100px] ${contact.color} opacity-40`} />
-                </div>
-
-                <div className="absolute top-4 text-center z-20 h-16 pointer-events-none w-full flex flex-col items-center justify-center">
-                    {status === 'sending' ? (
-                        <div className="flex flex-col items-center animate-pulse">
-                        <Loader2 className="animate-spin text-white/50 mb-2" size={20} />
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-bold">Sending Pulse</p>
-                        </div>
-                    ) : tapCount > 0 ? (
-                        <div className="animate-bounce">
-                        <p className="text-5xl font-outfit font-bold text-white drop-shadow-lg">{tapCount}</p>
-                        <p className="text-white/60 text-xs uppercase tracking-widest font-bold">Pulses</p>
-                        </div>
-                    ) : status === 'holding' ? (
-                        <p className="text-white text-sm font-medium animate-pulse tracking-wide italic">"I am Holding u right now"</p>
-                    ) : null}
                 </div>
 
                 <div 
@@ -676,41 +606,24 @@ const VibingScreen: React.FC<Props> = ({
                 {renderPatternSlot(5)}
             </div>
 
-            {/* Mode Switcher / Toolbar - NOW WITH VIBRANT COLORS */}
-            {/* FIXED: Using handleModeSwitch to trigger invites */}
             <div className={`absolute bottom-6 left-0 right-0 z-20 transition-all duration-300 flex items-center justify-center gap-3 ${status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                
                 <button onClick={() => handleModeSwitch('heartbeat')} className="w-14 h-14 rounded-2xl border flex items-center justify-center relative transition-all glass-button text-white/50 hover:border-rose-400/50">
                     <Activity size={24} className="absolute" strokeWidth={1.5} />
                     <Heart size={10} className="absolute z-10 fill-white/50 animate-pulse" />
                 </button>
-
                 <button onClick={() => handleModeSwitch('draw')} className="w-14 h-14 rounded-2xl border flex items-center justify-center relative transition-all glass-button text-white/50 hover:border-fuchsia-400/50">
                     <PenTool size={20} className="mb-1" />
                 </button>
-                
                 <button onClick={() => handleModeSwitch('matrix')} className="w-14 h-14 rounded-2xl border flex items-center justify-center relative transition-all glass-button text-white/50 hover:border-cyan-400/50">
                      <Grid3X3 size={20} />
                 </button>
-
                 <button onClick={() => handleModeSwitch('breathe')} className="w-14 h-14 rounded-2xl border flex items-center justify-center relative transition-all glass-button text-white/50 hover:border-sky-400/50">
                      <Wind size={20} />
                 </button>
-
                 <button onClick={onOpenChat} className="flex items-center justify-center w-14 h-14 glass-button rounded-2xl active:scale-95 transition-all hover:bg-white/10 group">
                     <MessageCircle size={20} className="text-white/50 group-hover:text-white transition-colors" />
                 </button>
             </div>
-            
-            {showInfo && (
-                <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowInfo(false)}>
-                    <div className="glass-panel p-8 rounded-[2rem] max-w-sm w-full space-y-6 relative border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <h2 className={`text-3xl font-outfit font-bold ${MODE_INFO[mode].color} drop-shadow-md`}>{MODE_INFO[mode].title}</h2>
-                        <p className="text-white/70 text-sm">{MODE_INFO[mode].answer}</p>
-                        <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-white/10 rounded-xl text-white font-bold">Got it</button>
-                    </div>
-                </div>
-            )}
             
             {showRecorder && (
                 <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex flex-col p-8">

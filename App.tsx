@@ -10,53 +10,41 @@ import ChatScreen from './components/ChatScreen';
 import { triggerHaptic, generateId, encryptMessage } from './constants';
 import * as Ably from 'ably';
 import { requestForToken, onMessageListener } from './src/firebase';
+import { Activity } from 'lucide-react';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<AppScreen>(AppScreen.SETUP);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
+  
+  // Signals
   const [incomingVibe, setIncomingVibe] = useState<VibeSignal | null>(null);
   const [incomingChatMessage, setIncomingChatMessage] = useState<VibeSignal | null>(null);
+  
+  // Global States
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [onlineContacts, setOnlineContacts] = useState<Set<string>>(new Set());
   const [customPatterns, setCustomPatterns] = useState<VibePattern[]>([]);
+  const [isGlobalHeartbeatActive, setIsGlobalHeartbeatActive] = useState(false);
   
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const wakeLockRef = useRef<any>(null);
 
-  const requestWakeLock = async () => {
-    if ('wakeLock' in navigator && contacts.length > 0) {
-      try {
-        if (!wakeLockRef.current) {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-          wakeLockRef.current.addEventListener('release', () => {
-            wakeLockRef.current = null;
-          });
-        }
-      } catch (err) {
-        console.warn('Vibe: WakeLock request failed:', err);
-      }
-    }
-  };
-
+  // --- INITIALIZATION ---
   useEffect(() => {
-    // 1. Initialize App & Notifications
     const initApp = async () => {
-      // Load Local Storage
       const savedUser = localStorage.getItem('vibe_user');
       const savedContacts = localStorage.getItem('vibe_contacts');
       const savedPatterns = localStorage.getItem('vibe_custom_patterns');
       
       let currentUser = savedUser ? JSON.parse(savedUser) : null;
 
-      // Background: Try to refresh FCM Token
       requestForToken().then((token) => {
         if (token && currentUser && currentUser.fcmToken !== token) {
            currentUser.fcmToken = token;
            setUser(currentUser);
            localStorage.setItem('vibe_user', JSON.stringify(currentUser));
-           // Re-init realtime to broadcast new token
            initRealtime(currentUser.pairCode, token);
         }
       }).catch(err => console.warn("Token background fetch failed", err));
@@ -64,7 +52,6 @@ const App: React.FC = () => {
       if (currentUser) {
         setUser(currentUser);
         setScreen(AppScreen.DASHBOARD);
-        // Init with existing token if we have one, or undefined
         initRealtime(currentUser.pairCode, currentUser.fcmToken);
       }
       
@@ -75,15 +62,16 @@ const App: React.FC = () => {
 
     initApp();
 
-    // Foreground Notification Listener
-    onMessageListener().then((payload: any) => {
-      console.log('Received foreground push:', payload);
-    });
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        } catch (err) { console.warn('WakeLock failed', err); }
+      }
+    };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        requestWakeLock();
-      }
+      if (document.visibilityState === 'visible') requestWakeLock();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -94,7 +82,7 @@ const App: React.FC = () => {
       if (wakeLockRef.current) wakeLockRef.current.release();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []); // Run once on mount
+  }, []);
 
   const saveCustomPattern = (pattern: VibePattern) => {
     const updated = [...customPatterns, pattern];
@@ -115,7 +103,7 @@ const App: React.FC = () => {
   };
 
   const resetApp = () => {
-    if (confirm("Permanently reset your identity? This will unpair all current connections.")) {
+    if (confirm("Permanently reset your identity?")) {
       localStorage.clear();
       window.location.reload();
     }
@@ -124,37 +112,27 @@ const App: React.FC = () => {
   const handleUpdateUser = (newProfile: UserProfile) => {
     setUser(newProfile);
     localStorage.setItem('vibe_user', JSON.stringify(newProfile));
-    // Re-initialize Realtime with new code immediately
     initRealtime(newProfile.pairCode, newProfile.fcmToken);
   };
 
   const initRealtime = (myCode: string, myToken?: string) => {
-    // Note: In production, use an auth URL instead of hardcoding the key
     const apiKey = 'cEcwGg.Pi_Jyw:JfLxT0E1WUIDcC8ljuvIOSt0yWHcSki8gXHFvfwHOag'; 
     try {
       if (ablyRef.current) ablyRef.current.close();
       
-      const ably = new Ably.Realtime({ 
-        key: apiKey, 
-        autoConnect: true, 
-        clientId: myCode 
-      });
+      const ably = new Ably.Realtime({ key: apiKey, autoConnect: true, clientId: myCode });
       ablyRef.current = ably;
 
       ably.connection.on('connected', () => setConnectionStatus('connected'));
       ably.connection.on('failed', () => setConnectionStatus('error'));
 
-      // Subscribe to my own channel to receive Vibes
       const myChannel = ably.channels.get(`vibe-${myCode}`);
       myChannel.subscribe('vibration', (message) => {
-        receiveVibe(message.data as VibeSignal);
+        receiveVibe(message.data as VibeSignal, myCode);
       });
 
-      // Enter presence to announce I am online (and share my FCM Token)
-      // We pass the token in the presence data so contacts can grab it
       myChannel.presence.enter({ fcmToken: myToken });
 
-      // Poll other contacts to see if they are online and get their tokens
       const refreshPresence = () => {
         const currentContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
         let contactsUpdated = false;
@@ -166,9 +144,6 @@ const App: React.FC = () => {
               const next = new Set(prev);
               if (members && members.length > 0) {
                  next.add(c.pairCode);
-                 
-                 // CHECK FOR TOKEN UPDATE
-                 // If the member has a token and we don't have it, update contact
                  const memberData = members[0].data;
                  if (memberData && memberData.fcmToken && memberData.fcmToken !== c.fcmToken) {
                     c.fcmToken = memberData.fcmToken;
@@ -179,13 +154,10 @@ const App: React.FC = () => {
               }
               return next;
             });
-            
-            // If we found a new token, save it to local storage
             if (contactsUpdated) {
                 localStorage.setItem('vibe_contacts', JSON.stringify(currentContacts));
                 setContacts(currentContacts);
             }
-
           }).catch(() => {});
         });
       };
@@ -198,83 +170,92 @@ const App: React.FC = () => {
     }
   };
 
-  const receiveVibe = (vibe: VibeSignal) => {
-    // Ignore my own messages (Self-Echo Cancellation)
+  // --- GATEKEEPER: THE CORE ROUTING LOGIC ---
+  const receiveVibe = (vibe: VibeSignal, myCode: string) => {
+    // 1. Identity Check
     if (user) {
         if (vibe.senderUniqueId && vibe.senderUniqueId === user.id) return;
         if (!vibe.senderUniqueId && vibe.senderId === user.pairCode) return;
     }
     
-    const savedContacts = JSON.parse(localStorage.getItem('vibe_contacts') || '[]');
-    const contact = savedContacts.find((c: Contact) => c.pairCode === vibe.senderId);
-    
-    if (contact) {
-      
-      // --- CHAT LOGIC ---
-      if (vibe.type === 'chat' || vibe.type === 'chat-clear') {
-          setIncomingChatMessage(vibe);
-          
-          if (vibe.type === 'chat') {
-            // DO NOT setIncomingVibe(vibe) here. We don't want the giant heart overlay.
-            // Just haptic and maybe a small toast if implemented later.
-            if (screen !== AppScreen.CHAT) {
-               triggerHaptic([30, 30]); // Discrete double tap
-            }
-          }
-          // Note: We removed 'return' here so that notifications can still trigger below
-      } 
-      
-      // --- SPECIAL MODES (DRAW, BREATHE, HEARTBEAT, MATRIX) ---
-      else if (['draw', 'breathe', 'heartbeat', 'game-matrix'].includes(vibe.type)) {
-          
-          setIncomingVibe(vibe); 
-          
-          // Specific Haptic Logic per Mode
-          if (vibe.type === 'heartbeat') {
-              if (vibe.count === 0) {
-                 // Stop signal - no haptic
-              } else {
-                 triggerHaptic([50, 100, 50]);
-              }
-          } 
-          else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') {
-               // Invitation - Silent or very short, waiting for acceptance
-               triggerHaptic(20); 
-          }
-          else if (vibe.type === 'draw') {
-             // Drawing should be silent unless it's the very first touch of a stroke, handled by client
-             // We generally disable haptic for draw stream to avoid buzzing
-          }
-      }
-      
-      // --- STANDARD VIBES (TAP, HOLD, PATTERN) ---
-      else {
-          setIncomingVibe(vibe);
-          
-          if (vibe.type === 'tap') {
-            const pattern = Array(vibe.count || 1).fill(300).flatMap(v => [v, 120]);
-            triggerHaptic(pattern.length > 0 ? pattern : 50);
-          } else if (vibe.type === 'hold') {
-            triggerHaptic(vibe.duration || 1800);
-          } else if (vibe.type === 'pattern' && vibe.patternData) {
-            triggerHaptic(vibe.patternData);
-          }
-      }
+    const contact = contacts.find((c: Contact) => c.pairCode === vibe.senderId);
+    if (!contact && vibe.senderId !== 'SYSTEM') return; // Only process known contacts or system
 
-      // --- SYSTEM NOTIFICATION (BACKGROUND) ---
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+    // 2. Chat Routing (Silent, No Notification)
+    if (vibe.type === 'chat' || vibe.type === 'chat-clear') {
+        setIncomingChatMessage(vibe);
+        // STRICT: No haptic, No notification for chat
+        return;
+    }
+
+    // 3. Heartbeat Routing (Global)
+    if (vibe.type === 'heartbeat') {
+        if (vibe.count === 0) {
+            setIsGlobalHeartbeatActive(false); // STOP signal
+        } else {
+            setIsGlobalHeartbeatActive(true); // START signal
+            if ((vibe.count || 0) <= 10) triggerHaptic([50, 100, 50]);
+        }
+        setIncomingVibe(vibe);
+        // STRICT: No notification for heartbeat pulses
+        return; 
+    }
+
+    // 4. Data Routing (Draw/Breathe) - STRICT ISOLATION
+    if (['draw', 'breathe'].includes(vibe.type)) {
+        // Invite Logic
+        const isInvite = (vibe.type === 'draw' && (!vibe.points || vibe.points.length === 0)) ||
+                         (vibe.type === 'breathe' && vibe.count === 1); 
+        
+        if (isInvite) {
+            setIncomingVibe(vibe); // Show Receiver Overlay
+            triggerHaptic(50);
+            sendNotification(vibe); // Notify for Invite
+        } else {
+            // Raw Data -> Only if on Vibing Screen
+            if (screen === AppScreen.VIBING) {
+                setIncomingVibe(vibe);
+            }
+        }
+        return;
+    }
+
+    // 5. Game Routing
+    if (vibe.type === 'game-matrix') {
+        if (vibe.matrixAction === 'invite') {
+            setIncomingVibe(vibe);
+            triggerHaptic(50);
+            sendNotification(vibe); // Notify for Invite
+        } else if (screen === AppScreen.VIBING) {
+            setIncomingVibe(vibe);
+        }
+        return;
+    }
+
+    // 6. Standard Vibes (Tap/Hold/Pattern)
+    setIncomingVibe(vibe);
+    if (vibe.type === 'tap') triggerHaptic(Array(vibe.count || 1).fill(100));
+    if (vibe.type === 'hold') triggerHaptic(vibe.duration || 500);
+    if (vibe.type === 'pattern') triggerHaptic(vibe.patternData || []);
+    
+    sendNotification(vibe);
+  };
+
+  // --- NOTIFICATION HANDLER ---
+  const sendNotification = (vibe: VibeSignal) => {
+    // STRICT RULE: Only Tap, Hold, Pattern, and INVITES
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+         
          const ICON_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Cpath d='m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E";
          
          let bodyText = '';
-         if (vibe.type === 'chat') bodyText = "Sent you a secret message";
-         else if (vibe.type === 'heartbeat') bodyText = "Is sending their heartbeat";
-         else if (vibe.type === 'draw') bodyText = "Is drawing something for you";
-         else if (vibe.type === 'breathe') bodyText = "Invited you to breathe";
-         else if (vibe.type === 'game-matrix') bodyText = "Invited you to play Telepathy";
-         else if (vibe.text) bodyText = vibe.text;
-         else if (vibe.type === 'tap') bodyText = 'Sent you a tap.';
+         if (vibe.type === 'tap') bodyText = 'Sent you a tap.';
          else if (vibe.type === 'hold') bodyText = 'Is holding you.';
-         else bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
+         else if (vibe.type === 'pattern') bodyText = `Sent ${vibe.patternName || 'a vibe'}`;
+         else if (vibe.type === 'draw' && (!vibe.points || vibe.points.length === 0)) bodyText = "Invited you to Draw";
+         else if (vibe.type === 'breathe' && vibe.count === 1) bodyText = "Invited you to Breathe";
+         else if (vibe.type === 'game-matrix' && vibe.matrixAction === 'invite') bodyText = "Invited you to play Telepathy";
+         else return; // IGNORE EVERYTHING ELSE
 
          navigator.serviceWorker.ready.then(registration => {
              registration.showNotification(vibe.senderName, {
@@ -284,9 +265,6 @@ const App: React.FC = () => {
                 data: { url: window.location.href }
              });
          });
-      }
-
-      // Auto-clear signal logic moved to VibeReceiver to allow user interaction for Invites
     }
   };
 
@@ -308,13 +286,12 @@ const App: React.FC = () => {
   ) => {
     if (!ablyRef.current || !user) return;
     
-    // Optimistic UI Haptic (only for simple local interaction)
-    if (type === 'tap' || type === 'hold' || type === 'pattern') triggerHaptic(40);
+    // Local Feedback
+    if (['tap', 'hold', 'pattern'].includes(type)) triggerHaptic(50);
 
     const targetChannel = ablyRef.current.channels.get(`vibe-${targetCode}`);
     
     let processedText = text;
-    // Encrypt if it's a chat
     if (type === 'chat' && text) {
         processedText = await encryptMessage(text, user.pairCode, targetCode);
     }
@@ -342,58 +319,28 @@ const App: React.FC = () => {
 
     try {
       await targetChannel.publish('vibration', payload);
-    } catch (err) {
-      if (type !== 'chat') triggerHaptic([150, 100, 150]);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const handleSetupComplete = async (profile: UserProfile) => {
-    setUser(profile);
-    localStorage.setItem('vibe_user', JSON.stringify(profile));
-    setScreen(AppScreen.DASHBOARD);
-
-    try {
-      initRealtime(profile.pairCode, undefined);
-      const token = await requestForToken();
-      if (token) {
-        const updatedProfile = { ...profile, fcmToken: token };
-        setUser(updatedProfile);
-        localStorage.setItem('vibe_user', JSON.stringify(updatedProfile));
-        initRealtime(profile.pairCode, token);
-      }
-    } catch (e) {
-      console.warn("Background setup failed", e);
-    }
+  const handleGlobalStop = () => {
+      if (!activeContact) return;
+      setIsGlobalHeartbeatActive(false);
+      sendVibeToPartner(activeContact.pairCode, 'heartbeat', undefined, 0); // Send STOP signal
   };
 
-  const handleAddContact = (contact: Contact) => {
-    const updated = [...contacts, contact];
-    setContacts(updated);
-    localStorage.setItem('vibe_contacts', JSON.stringify(updated));
-    setScreen(AppScreen.DASHBOARD);
-  };
-
-  // Determine if we should show the global overlay
   const shouldShowOverlay = () => {
-    if (!incomingVibe) return false;
-    
-    // Chat handled separately via toast/haptic only
-    if (incomingVibe.type === 'chat') return false; 
-    
-    // If we are currently IN the specific mode that is sending data, don't show overlay
-    // But since App doesn't know internal VibingScreen mode state easily, we rely on VibeReceiver to be smart
-    // or we just show invites.
-    
-    return true;
+      if (!incomingVibe) return false;
+      if (incomingVibe.type === 'chat' || incomingVibe.type === 'chat-clear') return false;
+      return true;
   };
 
   return (
-    <div className="min-h-screen h-full w-full flex flex-col no-select relative overflow-hidden">
-      {/* Ad Space Buffers */}
-      <div className="w-full h-12 shrink-0 bg-transparent z-0 pointer-events-none" />
+    <div className="min-h-screen h-full w-full flex flex-col no-select relative overflow-hidden bg-zinc-950">
+      <div className="w-full h-12 shrink-0 bg-transparent pointer-events-none" />
       
       <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
-          {screen === AppScreen.SETUP && <SetupScreen onComplete={handleSetupComplete} />}
+          {screen === AppScreen.SETUP && <SetupScreen onComplete={(p) => { setUser(p); setScreen(AppScreen.DASHBOARD); localStorage.setItem('vibe_user', JSON.stringify(p)); initRealtime(p.pairCode, undefined); }} />}
+          
           {screen === AppScreen.DASHBOARD && user && (
             <Dashboard 
               user={user} 
@@ -407,7 +354,8 @@ const App: React.FC = () => {
               onUpdateUser={handleUpdateUser}
             />
           )}
-          {screen === AppScreen.PAIRING && <PairingScreen onBack={() => setScreen(AppScreen.DASHBOARD)} onAdd={handleAddContact} />}
+
+          {screen === AppScreen.PAIRING && <PairingScreen onBack={() => setScreen(AppScreen.DASHBOARD)} onAdd={(c) => { const u = [...contacts, c]; setContacts(u); localStorage.setItem('vibe_contacts', JSON.stringify(u)); setScreen(AppScreen.DASHBOARD); }} />}
           
           {screen === AppScreen.VIBING && activeContact && user && (
             <VibingScreen 
@@ -427,26 +375,34 @@ const App: React.FC = () => {
 
           {screen === AppScreen.CHAT && activeContact && user && (
             <ChatScreen 
-              contact={activeContact}
-              user={user}
-              onBack={() => setScreen(AppScreen.VIBING)}
-              onSendMessage={(text) => sendVibeToPartner(activeContact.pairCode, 'chat', text)}
+              contact={activeContact} 
+              user={user} 
+              onBack={() => setScreen(AppScreen.VIBING)} 
+              onSendMessage={(txt) => sendVibeToPartner(activeContact.pairCode, 'chat', txt)} 
               incomingMessage={incomingChatMessage}
               onDeleteHistory={() => sendVibeToPartner(activeContact.pairCode, 'chat-clear')}
             />
           )}
       </div>
 
+      {/* GLOBAL HEARTBEAT STOP BUTTON */}
+      {isGlobalHeartbeatActive && (
+          <div className="fixed bottom-24 inset-x-0 flex justify-center z-[1000] pointer-events-auto">
+              <button 
+                onClick={handleGlobalStop}
+                className="bg-rose-500 text-white px-8 py-4 rounded-full font-bold shadow-[0_0_30px_rgba(244,63,94,0.6)] animate-pulse flex items-center gap-3 active:scale-95 transition-transform"
+              >
+                  <Activity className="animate-bounce" />
+                  <span>STOP PULSE</span>
+              </button>
+          </div>
+      )}
+
       {shouldShowOverlay() && incomingVibe && (
-          <VibeReceiver 
-            vibe={incomingVibe} 
-            contacts={contacts} 
-            onDismiss={() => setIncomingVibe(null)} 
-          />
+          <VibeReceiver vibe={incomingVibe} contacts={contacts} onDismiss={() => setIncomingVibe(null)} />
       )}
       
-       {/* Ad Space Buffers */}
-       <div className="w-full h-12 shrink-0 bg-transparent z-0 pointer-events-none" />
+       <div className="w-full h-12 shrink-0 bg-transparent pointer-events-none" />
     </div>
   );
 };
