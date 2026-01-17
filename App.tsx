@@ -234,11 +234,26 @@ const App: React.FC = () => {
 
     // --- INVITATIONS (CONVERT TO CHAT SYSTEM MESSAGE) ---
     if (vibe.action === 'invite') {
-        const inviteText = `${vibe.senderName} invited you to ${vibe.category === 'matrix' ? 'Telepathy' : vibe.category}`;
+        let gameName = vibe.category as string;
+        if (vibe.category === 'matrix') gameName = 'Telepathy';
+        if (vibe.category === 'game-ttt') gameName = 'Tic Tac Toe';
+        const inviteText = `${vibe.senderName} wants to play ${gameName}`;
         addChatMessage(vibe.id, 'SYSTEM', inviteText, 'system', vibe.timestamp);
         sendNotification(vibe);
-        // PASS THROUGH: We still want the VibingScreen to see the invite to update mode if needed,
-        // but strictly NO VIBRATION here.
+    }
+
+    // --- WHISPERS (EMOTIONAL ECHOES) ---
+    // Generate soft text feedback when vibration occurs
+    if ((vibe.category === 'touch' && vibe.action === 'data') || (vibe.category === 'heartbeat' && vibe.action === 'data')) {
+         const WHISPERS = [
+             "thinking of you", "felt that", "here with you", "💛", "warmth", "received",
+             "softly", "close", "listening", "yours", "gentle", "with you"
+         ];
+         // Randomly decide to show a whisper (not every single tap, to avoid spam, but often enough)
+         if (Math.random() > 0.6) {
+             const text = WHISPERS[Math.floor(Math.random() * WHISPERS.length)];
+             addChatMessage(generateId(), 'SYSTEM', text, 'whisper', Date.now());
+         }
     }
 
     // --- SIGNAL ROUTING ---
@@ -256,6 +271,7 @@ const App: React.FC = () => {
         case 'draw':
         case 'breathe':
         case 'matrix':
+        case 'game-ttt':
             // No vibration for these modes' signals except touch interactions within them
             setIncomingVibe(vibe); 
             break;
@@ -273,9 +289,10 @@ const App: React.FC = () => {
     }
   };
 
-  const addChatMessage = (id: string, senderId: string, text: string, type: 'user' | 'system', timestamp: number) => {
+  const addChatMessage = (id: string, senderId: string, text: string, type: 'user' | 'system' | 'whisper', timestamp: number) => {
       setChatMessages(prev => [...prev, { id, senderId, text, timestamp, type }]);
       if (!isChatOpenRef.current) {
+          // Increment unread count (Whispers increment too, but gently)
           setUnreadChatCount(prev => prev + 1);
       }
   };
@@ -289,7 +306,7 @@ const App: React.FC = () => {
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
          // Simple notification, non-intrusive
          if (vibe.action === 'invite' || vibe.category === 'touch') {
-             const body = vibe.action === 'invite' ? `Invite: ${vibe.category}` : "Thinking of you";
+             const body = vibe.action === 'invite' ? `Invite: ${vibe.category}` : "A soft touch from them...";
              navigator.serviceWorker.ready.then(reg => {
                  reg.showNotification(vibe.senderName, { body, tag: 'vibe-msg' });
              });
@@ -318,11 +335,6 @@ const App: React.FC = () => {
           timestamp: Date.now(), category: type, action: action, ...payload
       } as VibeSignal;
       await sendVibeToPartner(activeContact.pairCode, signal);
-  };
-
-  const handleGlobalStop = () => {
-      setIsGlobalHeartbeatActive(false);
-      createAndSend('heartbeat', 'stop', {});
   };
 
   const handleSendMessage = (text: string) => {
@@ -370,14 +382,6 @@ const App: React.FC = () => {
             />
           )}
       </div>
-
-      {isGlobalHeartbeatActive && (
-          <div className="fixed bottom-24 inset-x-0 flex justify-center z-[1000] pointer-events-auto">
-              <button onClick={handleGlobalStop} className="bg-rose-500 text-white px-8 py-4 rounded-full font-bold shadow-[0_0_30px_rgba(244,63,94,0.6)] animate-pulse flex items-center gap-3 active:scale-95 transition-transform">
-                  <Activity className="animate-bounce" /> <span>STOP PULSE</span>
-              </button>
-          </div>
-      )}
       
       <div className="w-full h-safe-bottom shrink-0 bg-transparent pointer-events-none" />
     </div>

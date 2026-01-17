@@ -1,9 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeCategory, VibeAction, VibePattern, VibeSignal, ChatMessage } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Activity, PenTool, Wind, Grid3X3, Play, Pause, Square, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Activity, PenTool, Wind, Grid3X3, Play, Pause, Square, MessageCircle, LayoutGrid } from 'lucide-react';
 import { triggerHaptic, generateId } from '../constants';
 import ChatDrawer from './ChatScreen'; 
+import TicTacToe from './TicTacToe';
+import DraggableChatButton from './DraggableChatButton';
 
 interface Props {
   contact: Contact;
@@ -28,7 +30,7 @@ const VibingScreen: React.FC<Props> = ({
   contact, user, onBack, incomingVibe, onSendVibe, customPatterns, onSavePattern, onDeletePattern,
   chatMessages, isChatOpen, unreadCount, onToggleChat, onSendMessage, onClearChat
 }) => {
-  const [mode, setMode] = useState<'default' | 'heartbeat' | 'draw' | 'breathe' | 'matrix'>('default');
+  const [mode, setMode] = useState<'default' | 'heartbeat' | 'draw' | 'breathe' | 'matrix' | 'game-ttt'>('default');
   const [isPressing, setIsPressing] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const [status, setStatus] = useState<'idle' | 'holding' | 'tapped' | 'recording' | 'sending'>('idle');
@@ -105,6 +107,10 @@ const VibingScreen: React.FC<Props> = ({
                 setMatrixState('briefing'); setMyMatrixSelection(null); setPartnerMatrixSelection(null);
             }
         }
+    } else if (incomingVibe.category === 'game-ttt') {
+        if (mode === 'game-ttt' || incomingVibe.action === 'invite') {
+            if (mode !== 'game-ttt') setMode('game-ttt');
+        }
     }
   }, [incomingVibe, mode]);
 
@@ -116,8 +122,11 @@ const VibingScreen: React.FC<Props> = ({
         const beat = () => {
             heartbeatCountRef.current += 1;
             if (heartbeatCountRef.current > 10) {
-                setIsHeartbeatActive(false); onSendVibe('heartbeat', 'stop', {}); 
-                window.clearInterval(interval); return;
+                // AUTO-STOP after 10 beats (Organic end)
+                setIsHeartbeatActive(false); 
+                onSendVibe('heartbeat', 'stop', {}); 
+                window.clearInterval(interval); 
+                return;
             }
             onSendVibe('heartbeat', 'data', { count: heartbeatCountRef.current });
             triggerHaptic([50, 100, 50]);
@@ -156,10 +165,13 @@ const VibingScreen: React.FC<Props> = ({
   }, [mode]);
 
   // --- ACTIONS ---
-  const toggleHeartbeat = () => {
-      if (isHeartbeatActive) { onSendVibe('heartbeat', 'stop', {}); setIsHeartbeatActive(false); } 
-      else setIsHeartbeatActive(true);
+  const triggerPulse = () => {
+      // One-way trigger, no stopping manually necessary
+      if (!isHeartbeatActive) {
+          setIsHeartbeatActive(true);
+      }
   };
+
   const toggleBreathe = () => {
     if (isBreatheActive) { onSendVibe('breathe', 'stop', {}); setIsBreatheActive(false); } 
     else { onSendVibe('breathe', 'invite', { variant: breatheVariant }); setIsBreatheActive(true); }
@@ -220,32 +232,56 @@ const VibingScreen: React.FC<Props> = ({
   };
   const renderPatternSlot = (index: number) => {
     const pattern = customPatterns[index];
-    if (!pattern) return ( <button key={`slot-${index}`} onClick={() => { setShowRecorder(true); setStatus('recording'); }} className={`w-14 h-14 rounded-2xl border border-dashed border-white/20 hover:border-pink-300 flex items-center justify-center text-white/40 hover:text-pink-300 transition-all ${status === 'sending' || status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}><Plus size={18} /></button> );
+    if (!pattern) return ( <button key={`slot-${index}`} onClick={() => { setShowRecorder(true); setStatus('recording'); }} className={`w-14 h-14 rounded-full border border-dashed border-white/20 hover:border-pink-300 flex items-center justify-center text-white/40 hover:text-pink-300 transition-all ${status === 'sending' || status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}><Plus size={18} /></button> );
     return (
       <div key={pattern.id} className={`relative group w-16 h-16 ${status === 'sending' || status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <button onClick={() => { setStatus('sending'); triggerHaptic(pattern.data); onSendVibe('touch', 'data', { touchType: 'pattern', patternData: pattern.data, patternEmoji: pattern.emoji, patternName: pattern.name }).finally(() => setStatus('idle')); }} className={`glass-button w-full h-full rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-90 overflow-hidden relative shadow-lg`}><span className="text-xl filter drop-shadow-md">{pattern.emoji}</span></button>
+        <button onClick={() => { setStatus('sending'); triggerHaptic(pattern.data); onSendVibe('touch', 'data', { touchType: 'pattern', patternData: pattern.data, patternEmoji: pattern.emoji, patternName: pattern.name }).finally(() => setStatus('idle')); }} className={`glass-button w-full h-full rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-90 overflow-hidden relative shadow-lg bg-white/5`}><span className="text-xl filter drop-shadow-md">{pattern.emoji}</span></button>
         <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete pattern?')) onDeletePattern(pattern.id); }} className="absolute -top-1 -right-1 w-5 h-5 bg-black rounded-full border border-white/20 flex items-center justify-center text-white/50 hover:text-red-400 z-10 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
       </div>
     );
   };
-  const handleModeSwitch = (newMode: 'heartbeat' | 'draw' | 'breathe' | 'matrix') => {
+  const handleModeSwitch = (newMode: 'heartbeat' | 'draw' | 'breathe' | 'matrix' | 'game-ttt') => {
       setMode(newMode);
       if (newMode === 'heartbeat') onSendVibe('heartbeat', 'invite', {});
       else if (newMode === 'draw') onSendVibe('draw', 'invite', {});
       else if (newMode === 'breathe') onSendVibe('breathe', 'invite', {});
       else if (newMode === 'matrix') onSendVibe('matrix', 'invite', {});
+      else if (newMode === 'game-ttt') onSendVibe('game-ttt', 'invite', {});
   };
 
   let content;
   if (mode === 'heartbeat') {
       content = (
-          <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in duration-300 relative">
-               <button onClick={() => { setIsHeartbeatActive(false); onSendVibe('heartbeat', 'stop', {}); setMode('default'); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white"><X size={24} /></button>
-              <p className="text-orange-200/60 uppercase tracking-widest text-xs font-bold mb-12">{isHeartbeatActive ? 'Sending Pulse...' : 'Heartbeat Ready'}</p>
-              <button onClick={toggleHeartbeat} className={`relative group active:scale-95 transition-all duration-300 rounded-[3rem] p-1 flex items-center shadow-2xl ${isHeartbeatActive ? 'bg-rose-500 shadow-rose-900/40' : 'bg-white/10 hover:bg-white/20'}`}>
-                  <div className="flex items-center gap-4 px-6 py-4">{isHeartbeatActive ? (<><Pause size={32} className="text-white fill-white" /><span className="text-white font-bold tracking-widest uppercase text-sm">Stop</span></>) : (<><Play size={32} className="text-white fill-white ml-1" /><span className="text-white font-bold tracking-widest uppercase text-sm">Start Pulse</span></>)}</div>
+          <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in duration-500 relative">
+              <button onClick={() => { setIsHeartbeatActive(false); onSendVibe('heartbeat', 'stop', {}); setMode('default'); }} className="absolute top-4 right-4 p-3 glass-button rounded-full text-white/60 hover:text-white transition-colors"><X size={24} /></button>
+              
+              <p className="text-rose-200/60 uppercase tracking-[0.2em] text-xs font-bold mb-12 animate-pulse">
+                {isHeartbeatActive ? 'Listening...' : 'Shared Pulse'}
+              </p>
+
+              <button 
+                onClick={triggerPulse}
+                disabled={isHeartbeatActive}
+                className={`relative group transition-all duration-700 rounded-full flex items-center justify-center
+                    ${isHeartbeatActive ? 'scale-110 cursor-default' : 'active:scale-95 cursor-pointer hover:bg-rose-500/10'}
+                `}
+              >
+                  <div className={`w-40 h-40 rounded-full border border-rose-500/30 flex items-center justify-center relative ${isHeartbeatActive ? 'animate-heartbeat-double bg-rose-500/20 shadow-[0_0_60px_rgba(244,63,94,0.3)]' : 'bg-transparent'}`}>
+                        <Heart 
+                            size={64} 
+                            strokeWidth={1}
+                            className={`transition-all duration-700 ${isHeartbeatActive ? 'fill-rose-500 text-rose-500' : 'text-rose-300/50 fill-transparent'}`} 
+                        />
+                        {/* Ripples */}
+                        {isHeartbeatActive && (
+                            <>
+                                <div className="absolute inset-0 rounded-full border border-rose-500/40 animate-ping opacity-20" style={{ animationDuration: '1s' }} />
+                                <div className="absolute -inset-4 rounded-full border border-rose-500/20 animate-ping opacity-10" style={{ animationDuration: '1.5s' }} />
+                            </>
+                        )}
+                  </div>
+                  {!isHeartbeatActive && <span className="absolute mt-56 text-white/40 text-xs font-medium tracking-widest">SEND YOUR HEART</span>}
               </button>
-              <div className={`mt-12 w-64 h-64 flex items-center justify-center transition-all duration-500 ${isHeartbeatActive ? 'animate-heartbeat-double opacity-100' : 'opacity-50 grayscale-[0.5]'}`}><Heart size={180} strokeWidth={0.5} className={`transition-all duration-300 ${isHeartbeatActive ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_50px_rgba(244,63,94,0.6)]' : 'fill-white/10 text-white/20'}`} /></div>
           </div>
       )
   } else if (mode === 'draw') {
@@ -260,8 +296,8 @@ const VibingScreen: React.FC<Props> = ({
   } else if (mode === 'breathe') {
       content = (
           <div className="flex-1 flex flex-col items-center justify-center animate-in fade-in duration-1000 relative">
-               <button onClick={() => { setMode('default'); setIsBreatheActive(false); onSendVibe('breathe', 'stop', {}); }} className="absolute top-4 right-4 p-2 glass-button rounded-full text-white/60 hover:text-white"><X size={24} /></button>
-               <p className="text-sky-200/60 uppercase tracking-widest text-xs font-bold mb-12">Breathe Together</p>
+               <button onClick={() => { setMode('default'); setIsBreatheActive(false); onSendVibe('breathe', 'stop', {}); }} className="absolute top-4 right-4 p-3 glass-button rounded-full text-white/60 hover:text-white"><X size={24} /></button>
+               <p className="text-sky-200/60 uppercase tracking-widest text-xs font-bold mb-12">Sync your breathing</p>
                <div className="relative flex items-center justify-center mb-16">
                    <div className={`w-24 h-24 bg-sky-400/30 rounded-full absolute transition-all ease-in-out`} style={{ transform: (breathePhase === 'in' && isBreatheActive) ? 'scale(3)' : 'scale(1)', opacity: (breathePhase === 'in' && isBreatheActive) ? 0.4 : 0.1, transitionDuration: '4s' }} />
                    <div className={`w-48 h-48 border-2 ${isBreatheActive ? 'border-sky-300/40 shadow-[0_0_60px_rgba(125,211,252,0.2)]' : 'border-white/10'} rounded-full flex items-center justify-center transition-all ease-in-out backdrop-blur-sm`} style={{ transform: (breathePhase === 'in' && isBreatheActive) ? 'scale(1.5)' : 'scale(1)', transitionDuration: '4s' }}><button onClick={toggleBreathe} className="p-4 rounded-full bg-white/5 hover:bg-white/20 transition-colors">{isBreatheActive ? <Square size={32} className="text-white fill-white" /> : <Play size={40} className="text-white fill-white ml-2" />}</button></div>
@@ -271,27 +307,54 @@ const VibingScreen: React.FC<Props> = ({
   } else if (mode === 'matrix') {
       content = (
           <div className="flex-1 flex flex-col items-center justify-center animate-in slide-in-from-bottom duration-500 relative w-full h-full p-4">
-               <button onClick={() => { setMode('default'); onSendVibe('matrix', 'reset', {}); }} className="absolute top-2 right-2 p-2 glass-button rounded-full text-white/60 hover:text-white z-10"><X size={24} /></button>
+               <button onClick={() => { setMode('default'); onSendVibe('matrix', 'reset', {}); }} className="absolute top-2 right-2 p-3 glass-button rounded-full text-white/60 hover:text-white z-10"><X size={24} /></button>
                {matrixState === 'briefing' ? ( <div className="text-center space-y-4"><h2 className="text-2xl font-outfit font-bold text-white">Telepathy</h2><button onClick={startMatrixGame} className="bg-cyan-100/90 text-cyan-900 py-3 px-8 rounded-full font-bold">Start</button></div>
-               ) : ( <div className="grid gap-2 w-full max-w-sm aspect-[3/5]" style={{ gridTemplateColumns: `repeat(3, 1fr)` }}>{Array.from({ length: 9 }).map((_, i) => (<button key={i} onClick={() => handleMatrixTileClick(i)} className={`rounded-xl border border-white/10 ${myMatrixSelection === i ? 'bg-cyan-500' : 'bg-white/5'}`} />))}</div>)}
+               ) : ( <div className="grid gap-2 w-full max-w-sm aspect-[3/5]" style={{ gridTemplateColumns: `repeat(3, 1fr)` }}>{Array.from({ length: 9 }).map((_, i) => (<button key={i} onClick={() => handleMatrixTileClick(i)} className={`rounded-3xl border border-white/10 ${myMatrixSelection === i ? 'bg-cyan-500' : 'bg-white/5'}`} />))}</div>)}
           </div>
+      )
+  } else if (mode === 'game-ttt') {
+      content = (
+          <TicTacToe 
+              userCode={user.pairCode}
+              contactCode={contact.pairCode}
+              onSendSignal={onSendVibe}
+              incomingVibe={incomingVibe}
+              onClose={() => setMode('default')}
+          />
       )
   } else {
       content = (
           <div className="flex-1 flex flex-row items-center justify-between relative overflow-hidden">
-              <div className="w-20 flex flex-col items-start justify-center gap-4 pl-2 z-20">{renderPatternSlot(0)}{renderPatternSlot(1)}{renderPatternSlot(2)}</div>
+              <div className="w-20 flex flex-col items-start justify-center gap-6 pl-3 z-20">{renderPatternSlot(0)}{renderPatternSlot(1)}{renderPatternSlot(2)}</div>
               <div className="flex-1 flex flex-col items-center justify-center relative h-full">
                   <div onMouseDown={handleStart} onMouseUp={handleEnd} onMouseLeave={handleEnd} onTouchStart={handleStart} onTouchEnd={handleEnd} className={`relative group cursor-pointer no-select touch-none transition-opacity z-10 flex flex-col items-center ${status === 'recording' ? 'pointer-events-none opacity-20 blur-sm' : ''} ${status === 'sending' ? 'opacity-50' : ''}`}>
-                       <Heart size={140} strokeWidth={1.2} className={`${contact.color.replace('bg-', 'text-').replace('from-', 'text-')} ${isPressing ? 'fill-white/20' : 'fill-transparent'}`} />
+                       <Heart 
+                            size={160} 
+                            strokeWidth={0.8} 
+                            className={`
+                                ${contact.color.replace('bg-', 'text-').replace('from-', 'text-')} 
+                                ${isPressing 
+                                    ? 'fill-white/20 scale-95 drop-shadow-[0_0_50px_rgba(244,63,94,0.5)]' 
+                                    : 'fill-white/5 animate-pulse-slow'
+                                } 
+                                transition-all duration-300
+                            `} 
+                        />
+                       {isPressing && (
+                           <span className="absolute -bottom-12 text-white/50 text-xs font-medium tracking-widest uppercase animate-pulse">Holding you close...</span>
+                       )}
                   </div>
               </div>
-              <div className="w-20 flex flex-col items-end justify-center gap-4 pr-2 z-20">{renderPatternSlot(3)}{renderPatternSlot(4)}{renderPatternSlot(5)}</div>
-              <div className="absolute bottom-6 inset-x-0 flex justify-center gap-3">
-                  <button onClick={() => handleModeSwitch('heartbeat')} className="w-14 h-14 glass-button rounded-2xl flex items-center justify-center"><Activity size={20} /></button>
-                  <button onClick={() => handleModeSwitch('draw')} className="w-14 h-14 glass-button rounded-2xl flex items-center justify-center"><PenTool size={20} /></button>
-                  <button onClick={() => handleModeSwitch('matrix')} className="w-14 h-14 glass-button rounded-2xl flex items-center justify-center"><Grid3X3 size={20} /></button>
-                  <button onClick={() => handleModeSwitch('breathe')} className="w-14 h-14 glass-button rounded-2xl flex items-center justify-center"><Wind size={20} /></button>
+              <div className="w-20 flex flex-col items-end justify-center gap-6 pr-3 z-20">{renderPatternSlot(3)}{renderPatternSlot(4)}{renderPatternSlot(5)}</div>
+              
+              <div className="absolute bottom-8 inset-x-0 flex justify-center gap-4">
+                  <button onClick={() => handleModeSwitch('heartbeat')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-rose-500/20 text-white/80"><Activity size={22} /></button>
+                  <button onClick={() => handleModeSwitch('draw')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-fuchsia-500/20 text-white/80"><PenTool size={22} /></button>
+                  <button onClick={() => handleModeSwitch('game-ttt')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-cyan-500/20 text-white/80"><LayoutGrid size={22} /></button>
+                  <button onClick={() => handleModeSwitch('matrix')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-emerald-500/20 text-white/80"><Grid3X3 size={22} /></button>
+                  <button onClick={() => handleModeSwitch('breathe')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-sky-500/20 text-white/80"><Wind size={22} /></button>
               </div>
+              
               {showRecorder && (
                   <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex flex-col p-8 items-center justify-center">
                        <div onMouseDown={handleDrumStart} onMouseUp={handleDrumEnd} onTouchStart={handleDrumStart} onTouchEnd={handleDrumEnd} className="w-52 h-52 rounded-[4rem] glass-button flex items-center justify-center"><CircleDot size={80} className="text-white/40" /></div>
@@ -306,23 +369,17 @@ const VibingScreen: React.FC<Props> = ({
   return (
       <div className="flex-1 flex flex-col h-full w-full relative">
           {/* Nav & Chat Button Overlay */}
-          <div className="absolute top-4 inset-x-4 flex justify-between z-50 pointer-events-none">
-              <button onClick={onBack} className="p-4 glass-button rounded-full text-white/60 hover:text-white pointer-events-auto">
+          <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none p-4">
+              <button onClick={onBack} className="p-4 glass-button rounded-full text-white/60 hover:text-white pointer-events-auto shadow-xl">
                   <ChevronLeft size={24} />
               </button>
-              
-              <button 
-                  onClick={() => onToggleChat(!isChatOpen)} 
-                  className={`p-4 rounded-full text-white pointer-events-auto relative shadow-xl transition-all ${isChatOpen ? 'bg-zinc-800' : 'glass-button hover:bg-white/10'}`}
-              >
-                  <MessageCircle size={24} />
-                  {unreadCount > 0 && !isChatOpen && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-zinc-950">
-                          {unreadCount}
-                      </div>
-                  )}
-              </button>
           </div>
+
+          <DraggableChatButton 
+            onClick={() => onToggleChat(!isChatOpen)}
+            unreadCount={unreadCount}
+            isOpen={isChatOpen}
+          />
 
           {/* Main Vibe Content */}
           {content}

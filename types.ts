@@ -1,5 +1,5 @@
 
-export type VibeCategory = 'heartbeat' | 'draw' | 'breathe' | 'matrix' | 'touch' | 'chat';
+export type VibeCategory = 'heartbeat' | 'draw' | 'breathe' | 'matrix' | 'touch' | 'chat' | 'game-ttt';
 export type VibeAction = 'invite' | 'accept' | 'data' | 'stop' | 'sync' | 'text' | 'clear' | 'select' | 'reveal' | 'reset';
 
 // Base interface for all signals
@@ -63,8 +63,16 @@ export interface MatrixSignal extends BaseSignal {
   selectionIndex?: number;
 }
 
+// 7. Tic Tac Toe Signals
+export interface TicTacToeSignal extends BaseSignal {
+  category: 'game-ttt';
+  action: 'invite' | 'data' | 'reset';
+  cellIndex?: number;
+  player?: 'X' | 'O';
+}
+
 // Discriminated Union
-export type VibeSignal = TouchSignal | ChatSignal | HeartbeatSignal | DrawSignal | BreatheSignal | MatrixSignal;
+export type VibeSignal = TouchSignal | ChatSignal | HeartbeatSignal | DrawSignal | BreatheSignal | MatrixSignal | TicTacToeSignal;
 
 export interface VibePattern {
   id: string;
@@ -95,7 +103,6 @@ export enum AppScreen {
   DASHBOARD = 'dashboard',
   PAIRING = 'pairing',
   VIBING = 'vibing'
-  // Chat is now an overlay, not a separate screen
 }
 
 export interface ChatMessage {
@@ -103,5 +110,5 @@ export interface ChatMessage {
   senderId: string;
   text: string;
   timestamp: number;
-  type: 'user' | 'system';
+  type: 'user' | 'system' | 'whisper';
 }

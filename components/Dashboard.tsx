@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Contact } from '../types';
-import { Plus, User, Settings, Trash2, X, Copy, Heart, Bell, Edit2, Check, AlertTriangle, BellOff } from 'lucide-react';
+import { Plus, User, Settings, Trash2, X, Copy, Heart, Bell, Edit2, Check, AlertTriangle, BellOff, Sparkles } from 'lucide-react';
 import { triggerHaptic } from '../constants';
 
 interface Props {
@@ -35,7 +35,7 @@ const Dashboard: React.FC<Props> = ({
   const copyCode = () => {
     navigator.clipboard.writeText(user.pairCode);
     triggerHaptic(50);
-    alert("Pairing code copied to clipboard!");
+    alert("Connection key copied to clipboard.");
   };
 
   const saveNewCode = () => {
@@ -101,7 +101,7 @@ const Dashboard: React.FC<Props> = ({
           <div>
             <h1 className="text-xl font-outfit font-semibold text-white/90">{user.displayName}</h1>
             <p className="text-[9px] uppercase tracking-widest text-white/50 font-black">
-              {status === 'connected' ? 'Screen Sync Active' : 'Connecting...'}
+              {status === 'connected' ? 'Hearts Entwined' : 'Waiting for a heartbeat...'}
             </p>
           </div>
         </div>
@@ -113,22 +113,23 @@ const Dashboard: React.FC<Props> = ({
       <div className="flex-1 flex flex-col space-y-4 overflow-y-auto pb-32 no-scrollbar">
         {contacts.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center space-y-8 text-center pb-12">
-            <div className="space-y-2 mt-8">
-                <h2 className="text-2xl font-outfit font-semibold text-white px-4 leading-tight">Pair with someone to connect</h2>
-                <p className="text-white/60 text-sm max-w-[240px] mx-auto">Your private code is <span className="text-orange-300 font-mono font-bold select-all tracking-wider">{user.pairCode}</span></p>
+            <div className="space-y-3 mt-8">
+                <Heart size={48} className="mx-auto text-rose-300/50 animate-pulse" fill="currentColor" strokeWidth={0} />
+                <h2 className="text-2xl font-outfit font-semibold text-white px-4 leading-tight">Waiting for your other half</h2>
+                <p className="text-white/60 text-sm max-w-[240px] mx-auto">Your unique soul signal is <span className="text-orange-300 font-mono font-bold select-all tracking-wider">{user.pairCode}</span></p>
             </div>
 
             <button 
               onClick={onAdd} 
-              className="group relative bg-gradient-to-r from-rose-500 to-orange-500 text-white px-10 py-6 rounded-[2rem] font-bold flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-orange-900/20 overflow-hidden"
+              className="group relative bg-gradient-to-r from-rose-500 to-orange-500 text-white px-12 py-6 rounded-[2.5rem] font-bold flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-orange-900/20 overflow-hidden"
             >
                 <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <span className="text-lg">Share Your Feelings</span>
-                <span className="text-[10px] uppercase tracking-widest text-white/70">Enter a code to begin</span>
+                <span className="text-lg flex items-center gap-2"><Sparkles size={18} /> Connect Souls</span>
+                <span className="text-[10px] uppercase tracking-widest text-white/70">Enter their signal</span>
             </button>
             
             <button onClick={copyCode} className="text-white/40 text-xs flex items-center gap-2 hover:text-white transition-colors">
-              <Copy size={14} /> Copy my pairing code
+              <Copy size={14} /> Copy my signal
             </button>
           </div>
         ) : (
@@ -154,13 +155,13 @@ const Dashboard: React.FC<Props> = ({
                       <div className="flex items-center space-x-2 mt-1">
                         <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 shadow-[0_0_5px_#34d399]' : 'bg-white/30'}`} />
                         <p className={`text-[10px] uppercase tracking-widest font-black ${isOnline ? 'text-emerald-300' : 'text-white/40'}`}>
-                          {isOnline ? 'Pulse Connected' : 'Away'}
+                          {isOnline ? 'Present' : 'Dreaming'}
                         </p>
                       </div>
                     </div>
                   </button>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); if (confirm(`Unpair from ${contact.name}?`)) onDeleteContact(contact.id); }}
+                    onClick={(e) => { e.stopPropagation(); if (confirm(`End connection with ${contact.name}?`)) onDeleteContact(contact.id); }}
                     className="absolute right-4 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 size={22} />
@@ -189,7 +190,7 @@ const Dashboard: React.FC<Props> = ({
                
                <div className="pt-2">
                     <div className="flex justify-between items-end mb-2">
-                        <p className="text-[10px] uppercase font-black text-white/50 tracking-widest">Secret Code</p>
+                        <p className="text-[10px] uppercase font-black text-white/50 tracking-widest">Love Code</p>
                         {!isEditingCode ? (
                             <button onClick={() => setIsEditingCode(true)} className="text-orange-300 text-xs font-bold flex items-center gap-1">
                                 <Edit2 size={12} /> Edit
@@ -221,7 +222,7 @@ const Dashboard: React.FC<Props> = ({
 
                <div className="h-[1px] bg-white/10 w-full" />
                <button onClick={copyCode} className="w-full py-5 bg-white text-black rounded-[1.5rem] font-bold flex items-center justify-center gap-3 active:scale-95 transition-all">
-                  <Copy size={20} /> Copy Pairing Code
+                  <Copy size={20} /> Copy Connection Key
                </button>
             </div>
 
@@ -245,7 +246,7 @@ const Dashboard: React.FC<Props> = ({
             </button>
             
             <button onClick={onResetApp} className="w-full p-6 bg-red-500/10 border border-red-500/20 text-red-400 rounded-[2.5rem] font-bold flex items-center justify-between">
-                <span>Reset Vibe Identity</span>
+                <span>Start Anew</span>
                 <Trash2 size={20} />
             </button>
           </div>

@@ -41,34 +41,34 @@ const PairingScreen: React.FC<Props> = ({ onBack, onAdd }) => {
         <button onClick={onBack} className="p-2 -ml-2 text-white/50 hover:text-white transition-colors">
           <ChevronLeft size={28} />
         </button>
-        <h1 className="text-xl font-outfit font-semibold text-white">Pair with someone</h1>
+        <h1 className="text-xl font-outfit font-semibold text-white">Connect with them</h1>
       </header>
 
       <form onSubmit={handleSubmit} className="flex-1 space-y-8">
         <div className="space-y-6">
           <div className="space-y-2">
-            <label className="text-xs uppercase tracking-widest text-white/50 font-bold ml-1">Their Secret Code</label>
+            <label className="text-xs uppercase tracking-widest text-white/50 font-bold ml-1">Their Connection Key</label>
             <input
               disabled={isVerifying}
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ENTER CODE"
+              placeholder="ENTER KEY"
               maxLength={20}
               className="w-full bg-white/5 border-white/10 border rounded-2xl px-5 py-5 text-2xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-cyan-400/50 text-cyan-300 disabled:opacity-50 placeholder-white/10"
             />
-            <p className="text-xs text-white/40 px-1">Ask your partner for their code from their dashboard.</p>
+            <p className="text-xs text-white/40 px-1">Ask your love for their key.</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs uppercase tracking-widest text-white/50 font-bold ml-1">Label</label>
+            <label className="text-xs uppercase tracking-widest text-white/50 font-bold ml-1">Their Name</label>
             <input
               disabled={isVerifying}
               type="text"
               value={name}
               maxLength={20}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Mom, Partner"
+              placeholder="What do you call them?"
               className="w-full bg-white/5 border-white/10 border rounded-2xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-cyan-400/50 text-white disabled:opacity-50 placeholder-white/20"
             />
           </div>
@@ -86,7 +86,7 @@ const PairingScreen: React.FC<Props> = ({ onBack, onAdd }) => {
           ) : (
             <>
               <Check size={24} />
-              <span>Confirm Connection</span>
+              <span>Bond Hearts</span>
             </>
           )}
         </button>

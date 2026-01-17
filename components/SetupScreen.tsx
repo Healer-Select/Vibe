@@ -38,7 +38,7 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
       <div className="w-full max-w-md space-y-8 text-center animate-in zoom-in duration-500">
         <div className="space-y-2">
           <h1 className="text-5xl font-outfit font-bold tracking-tight text-white drop-shadow-lg">Vibe</h1>
-          <p className="text-white/60 text-sm">Replace words with touch.</p>
+          <p className="text-white/60 text-sm">Where words fade, feeling begins.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 glass-panel p-8 rounded-[2.5rem] shadow-2xl">
@@ -54,14 +54,14 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
                 value={name}
                 disabled={isLoading}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Alex"
+                placeholder="What should they call you?"
                 className="w-full bg-white/5 border-white/10 border rounded-2xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-400/50 transition-all text-white disabled:opacity-50 placeholder-white/20"
                 />
             </div>
 
             <div>
                 <label className="block text-xs uppercase tracking-widest text-white/50 font-semibold mb-2 ml-1">
-                Create Your Secret Code
+                Your Connection Key
                 </label>
                 <div className="relative">
                     <input
@@ -77,7 +77,7 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
                     </div>
                 </div>
                 <p className="text-[10px] text-white/40 mt-2 px-1">
-                Share this code with your partner to connect. Make it unique!
+                Give this key to the one you love.
                 </p>
             </div>
           </div>
@@ -87,7 +87,7 @@ const SetupScreen: React.FC<Props> = ({ onComplete }) => {
             disabled={name.trim().length < 2 || code.length < 4 || isLoading}
             className="w-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-2xl shadow-lg shadow-fuchsia-900/20 transition-all active:scale-[0.98] flex items-center justify-center"
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : 'Get Started'}
+            {isLoading ? <Loader2 className="animate-spin" /> : 'Begin Journey'}
           </button>
         </form>
       </div>
