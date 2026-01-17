@@ -1,121 +1,130 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Contact, UserProfile, VibeSignal } from '../types';
-import { ChevronLeft, Send, ShieldCheck, Trash2, Clock, Smile } from 'lucide-react';
-import { decryptMessage } from '../constants';
+import React, { useEffect, useRef, useState } from 'react';
+import { Contact, UserProfile, ChatMessage } from '../types';
+import { Send, Trash2, Smile, X, MessageCircle } from 'lucide-react';
 
 interface Props {
   contact: Contact;
   user: UserProfile;
-  onBack: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  messages: ChatMessage[];
   onSendMessage: (text: string) => void;
-  incomingMessage: VibeSignal | null;
-  onDeleteHistory: () => void;
-}
-
-interface ChatMessage {
-  id: string;
-  senderId: string;
-  text: string;
-  timestamp: number;
+  onClear: () => void;
 }
 
 const COMMON_EMOJIS = ['❤️', '😘', '🥺', '🫂', '✨', '🔥', '💖', '🥰', '🌙', '🏠', '🔐', '🌊'];
 
-const ChatScreen: React.FC<Props> = ({ contact, user, onBack, onSendMessage, incomingMessage, onDeleteHistory }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+const ChatDrawer: React.FC<Props> = ({ contact, user, isOpen, onClose, messages, onSendMessage, onClear }) => {
   const [inputText, setInputText] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => { scrollToBottom(); }, [messages]);
-
   useEffect(() => {
-    const interval = setInterval(() => {
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-        setMessages(prev => prev.filter(m => m.timestamp > fiveMinutesAgo));
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (incomingMessage) {
-        if (incomingMessage.category === 'chat') {
-            if (incomingMessage.action === 'text' && incomingMessage.payload) {
-                decryptMessage(incomingMessage.payload, user.pairCode, contact.pairCode).then(decryptedText => {
-                    setMessages(prev => [...prev, {
-                        id: incomingMessage.id,
-                        senderId: incomingMessage.senderId,
-                        text: decryptedText,
-                        timestamp: incomingMessage.timestamp
-                    }]);
-                });
-            } else if (incomingMessage.action === 'clear') {
-                setMessages([]);
-            }
-        }
-    }
-  }, [incomingMessage, user.pairCode, contact.pairCode]);
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isOpen]);
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    const textToSend = inputText.trim();
-    setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        senderId: user.pairCode,
-        text: textToSend,
-        timestamp: Date.now()
-    }]);
+    onSendMessage(inputText.trim());
     setInputText('');
     setShowEmojis(false);
-    onSendMessage(textToSend);
   };
 
   const addEmoji = (emoji: string) => setInputText(prev => prev + emoji);
 
+  // If closed, don't render heavy DOM, or just hide it
   return (
-    <div className="flex-1 flex flex-col h-full bg-zinc-950 animate-in slide-in-from-right duration-300">
-      <header className="flex items-center justify-between p-4 border-b border-white/5 bg-zinc-950 z-10">
-        <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 -ml-2 text-zinc-400 active:scale-90 transition-transform"><ChevronLeft size={28} /></button>
-            <div>
-                <h1 className="text-lg font-outfit font-semibold text-white">{contact.name}</h1>
+    <>
+        {/* Backdrop */}
+        <div 
+            className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            onClick={onClose}
+        />
+
+        {/* Drawer */}
+        <div className={`fixed top-0 bottom-0 right-0 w-[85%] max-w-md bg-zinc-950 border-l border-white/10 z-[110] shadow-2xl transform transition-transform duration-300 flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/5 bg-zinc-900/50 backdrop-blur">
+                <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full ${contact.color} flex items-center justify-center text-xs font-bold`}>
+                        {contact.name.charAt(0)}
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-bold text-white">{contact.name}</h2>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Encrypted Chat</span>
+                    </div>
+                </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-[9px] uppercase tracking-widest text-emerald-500 font-bold">E2E Encrypted</span>
-                    <span className="text-[9px] uppercase tracking-widest text-rose-500 font-bold">5m Delete</span>
+                    <button onClick={() => { if(confirm('Clear history?')) onClear(); }} className="p-2 text-zinc-600 hover:text-rose-500 rounded-full hover:bg-white/5">
+                        <Trash2 size={16} />
+                    </button>
+                    <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/5">
+                        <X size={20} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4" onClick={() => setShowEmojis(false)}>
+                {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full text-zinc-700 space-y-2 opacity-50">
+                        <MessageCircle size={32} />
+                        <p className="text-xs">No messages yet</p>
+                    </div>
+                )}
+                
+                {messages.map((msg) => {
+                    if (msg.type === 'system') {
+                        return (
+                            <div key={msg.id} className="flex justify-center py-2">
+                                <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold bg-zinc-900 px-3 py-1 rounded-full border border-white/5">
+                                    {msg.text}
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    const isMe = msg.senderId === user.pairCode;
+                    return (
+                        <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isMe ? 'bg-zinc-800 text-white rounded-br-none' : 'bg-zinc-900 text-zinc-300 rounded-bl-none border border-white/5'}`}>
+                                {msg.text}
+                            </div>
+                        </div>
+                    );
+                })}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="p-4 bg-zinc-900 border-t border-white/5">
+                {showEmojis && (
+                    <div className="absolute bottom-20 left-4 right-4 p-3 bg-zinc-800 border border-white/10 rounded-2xl grid grid-cols-6 gap-2 shadow-xl z-20">
+                        {COMMON_EMOJIS.map(e => <button key={e} onClick={() => addEmoji(e)} className="p-2 text-xl hover:bg-white/5 rounded-lg transition-colors">{e}</button>)}
+                    </div>
+                )}
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setShowEmojis(!showEmojis)} className={`p-3 rounded-full transition-colors ${showEmojis ? 'text-amber-400 bg-white/5' : 'text-zinc-500'}`}>
+                        <Smile size={24} />
+                    </button>
+                    <input 
+                        type="text" 
+                        value={inputText} 
+                        onChange={(e) => setInputText(e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
+                        className="flex-1 bg-black/40 border border-white/10 rounded-full py-3 px-5 text-white focus:outline-none focus:border-zinc-500 placeholder-zinc-700" 
+                        placeholder="Message..." 
+                    />
+                    <button onClick={handleSend} disabled={!inputText.trim()} className="bg-white text-black p-3 rounded-full disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500">
+                        <Send size={20} />
+                    </button>
                 </div>
             </div>
         </div>
-        <button onClick={() => { if(confirm('Clear?')) { setMessages([]); onDeleteHistory(); } }} className="p-2 text-zinc-600 hover:text-rose-500"><Trash2 size={18} /></button>
-      </header>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" onClick={() => setShowEmojis(false)}>
-        {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.senderId === user.pairCode ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl px-5 py-3 text-sm leading-relaxed ${msg.senderId === user.pairCode ? 'bg-rose-600 text-white rounded-br-none' : 'bg-zinc-800 text-zinc-200 rounded-bl-none'}`}>
-                    {msg.text}
-                </div>
-            </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-      <div className="p-4 bg-zinc-950 border-t border-white/5 relative z-20">
-        {showEmojis && (
-            <div className="absolute bottom-full left-4 mb-2 p-2 bg-zinc-900 border border-white/10 rounded-2xl grid grid-cols-6 gap-2 shadow-xl">
-                {COMMON_EMOJIS.map(e => <button key={e} onClick={() => addEmoji(e)} className="p-2 text-xl">{e}</button>)}
-            </div>
-        )}
-        <div className="flex items-center gap-3">
-            <button onClick={() => setShowEmojis(!showEmojis)} className="p-3 text-zinc-500"><Smile size={24} /></button>
-            <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} className="flex-1 bg-zinc-900 border-none rounded-full py-3 px-5 text-white" placeholder="Secret message..." />
-            <button onClick={handleSend} disabled={!inputText.trim()} className="bg-rose-600 text-white p-3 rounded-full"><Send size={20} /></button>
-        </div>
-      </div>
-    </div>
+    </>
   );
 };
 
-export default ChatScreen;
+export default ChatDrawer;

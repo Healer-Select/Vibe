@@ -94,6 +94,14 @@ export enum AppScreen {
   SETUP = 'setup',
   DASHBOARD = 'dashboard',
   PAIRING = 'pairing',
-  VIBING = 'vibing',
-  CHAT = 'chat'
+  VIBING = 'vibing'
+  // Chat is now an overlay, not a separate screen
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  timestamp: number;
+  type: 'user' | 'system';
 }

@@ -1,13 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AppScreen, UserProfile, Contact, VibeSignal, VibePattern, VibeCategory, VibeAction } from './types';
+import { AppScreen, UserProfile, Contact, VibeSignal, VibePattern, VibeCategory, VibeAction, ChatMessage } from './types';
 import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import PairingScreen from './components/PairingScreen';
 import VibingScreen from './components/VibingScreen';
-import VibeRibbon from './components/VibeRibbon'; // Replaced VibeReceiver
-import ChatScreen from './components/ChatScreen';
-import { triggerHaptic, generateId, encryptMessage, getChannelName } from './constants';
+import { triggerHaptic, generateId, encryptMessage, decryptMessage, getChannelName } from './constants';
 import * as Ably from 'ably';
 import { requestForToken } from './src/firebase';
 import { Activity } from 'lucide-react';
@@ -24,9 +22,12 @@ const App: React.FC = () => {
 
   // Signals
   const [incomingVibe, setIncomingVibe] = useState<VibeSignal | null>(null);
-  const [incomingChatMessage, setIncomingChatMessage] = useState<VibeSignal | null>(null);
-  const [activeInvite, setActiveInvite] = useState<VibeSignal | null>(null);
   
+  // Chat State (Hoisted)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
   // Global States
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [onlineContacts, setOnlineContacts] = useState<Set<string>>(new Set());
@@ -36,11 +37,23 @@ const App: React.FC = () => {
   
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const wakeLockRef = useRef<any>(null);
-  const lastInviteTime = useRef<number>(0);
+  
+  // Ref for chat open status to be accessible in callbacks
+  const isChatOpenRef = useRef(false);
 
   // Sync Refs
   useEffect(() => { contactsRef.current = contacts; }, [contacts]);
   useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
+
+  // Chat Message Pruning (5m TTL)
+  useEffect(() => {
+    const interval = setInterval(() => {
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        setChatMessages(prev => prev.filter(m => m.timestamp > fiveMinutesAgo));
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -104,7 +117,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // --- PERSISTENCE HELPERS ---
+  // --- HELPERS ---
   const saveCustomPattern = (pattern: VibePattern) => {
     const updated = [...customPatterns, pattern];
     setCustomPatterns(updated);
@@ -136,7 +149,7 @@ const App: React.FC = () => {
     initRealtime(newProfile.pairCode, newProfile.fcmToken);
   };
 
-  // --- ABLY CONNECTION (HASHED CHANNELS) ---
+  // --- ABLY CONNECTION ---
   const initRealtime = async (myCode: string, myToken?: string) => {
     const apiKey = 'cEcwGg.Pi_Jyw:JfLxT0E1WUIDcC8ljuvIOSt0yWHcSki8gXHFvfwHOag'; 
     try {
@@ -148,7 +161,6 @@ const App: React.FC = () => {
       ably.connection.on('connected', () => setConnectionStatus('connected'));
       ably.connection.on('failed', () => setConnectionStatus('error'));
 
-      // SECURITY: Subscribe to HASHED channel name, not raw code
       const channelName = await getChannelName(myCode);
       const myChannel = ably.channels.get(channelName);
       
@@ -158,9 +170,8 @@ const App: React.FC = () => {
 
       if (myToken) myChannel.presence.enter({ fcmToken: myToken });
 
-      // Refresh presence (checking hashed channels of contacts)
       const refreshPresence = async () => {
-        const currentContacts = contactsRef.current; // Use Ref
+        const currentContacts = contactsRef.current;
         let contactsUpdated = false;
 
         for (const c of currentContacts) {
@@ -190,7 +201,7 @@ const App: React.FC = () => {
         }
       };
       
-      const interval = setInterval(refreshPresence, 10000); // 10s is sufficient
+      const interval = setInterval(refreshPresence, 10000); 
       refreshPresence();
       return () => clearInterval(interval);
     } catch (err) {
@@ -198,129 +209,126 @@ const App: React.FC = () => {
     }
   };
 
-  // --- GATEKEEPER: SECURE ROUTING LOGIC ---
-  const receiveVibe = (vibe: VibeSignal) => {
+  // --- SIGNAL HANDLING LOGIC ---
+  const receiveVibe = async (vibe: VibeSignal) => {
     const currentUser = userRef.current;
     const currentContacts = contactsRef.current;
 
-    // 1. Identity & Echo Check
     if (!currentUser) return;
     if (vibe.senderUniqueId && vibe.senderUniqueId === currentUser.id) return;
     if (vibe.senderId === currentUser.pairCode) return;
     
-    // 2. Contact Verification
     const contact = currentContacts.find((c: Contact) => c.pairCode === vibe.senderId);
-    if (!contact && vibe.senderId !== 'SYSTEM') {
-        console.warn("Security: Blocked signal from unknown sender");
-        return; 
+    if (!contact && vibe.senderId !== 'SYSTEM') return;
+
+    // --- CHAT & SYSTEM MESSAGES ---
+    if (vibe.category === 'chat') {
+        if (vibe.action === 'text' && vibe.payload && contact) {
+            const decrypted = await decryptMessage(vibe.payload, currentUser.pairCode, contact.pairCode);
+            addChatMessage(vibe.id, vibe.senderId, decrypted, 'user', vibe.timestamp);
+        } else if (vibe.action === 'clear') {
+            setChatMessages([]);
+        }
+        return; // No vibration for chat
     }
 
-    // 3. Flood Control (Invites)
+    // --- INVITATIONS (CONVERT TO CHAT SYSTEM MESSAGE) ---
     if (vibe.action === 'invite') {
-        const now = Date.now();
-        if (now - lastInviteTime.current < 2000) return; // Drop spam invites
-        lastInviteTime.current = now;
+        const inviteText = `${vibe.senderName} invited you to ${vibe.category === 'matrix' ? 'Telepathy' : vibe.category}`;
+        addChatMessage(vibe.id, 'SYSTEM', inviteText, 'system', vibe.timestamp);
+        sendNotification(vibe);
+        // PASS THROUGH: We still want the VibingScreen to see the invite to update mode if needed,
+        // but strictly NO VIBRATION here.
     }
 
-    // 4. ROUTING SWITCH
+    // --- SIGNAL ROUTING ---
     switch (vibe.category) {
-        case 'chat':
-            setIncomingChatMessage(vibe);
-            break;
-
         case 'heartbeat':
             if (vibe.action === 'stop') setIsGlobalHeartbeatActive(false);
             else {
                 setIsGlobalHeartbeatActive(true);
-                if (vibe.count && vibe.count <= 10) triggerHaptic([50, 100, 50]);
+                // Vibrate only on data, not invites
+                if (vibe.action === 'data' && vibe.count && vibe.count <= 10) triggerHaptic([50, 100, 50]);
             }
-            setIncomingVibe(vibe); // Pass to screen if active
+            setIncomingVibe(vibe);
             break;
             
         case 'draw':
         case 'breathe':
         case 'matrix':
-            if (vibe.action === 'invite') {
-                setActiveInvite(vibe); // Trigger Ribbon
-                triggerHaptic(50); // Single notify bump
-                sendNotification(vibe);
-            } else {
-                setIncomingVibe(vibe); // Data passed to VibingScreen
-            }
+            // No vibration for these modes' signals except touch interactions within them
+            setIncomingVibe(vibe); 
             break;
 
         case 'touch':
             setIncomingVibe(vibe);
-            if (vibe.touchType === 'tap') triggerHaptic(Array(vibe.count || 1).fill(100));
-            if (vibe.touchType === 'hold') triggerHaptic(vibe.duration || 500);
-            if (vibe.touchType === 'pattern' && vibe.patternData) triggerHaptic(vibe.patternData);
-            sendNotification(vibe);
+            // STRICT VIBRATION CHECK: Only Touch Data vibrates
+            if (vibe.action === 'data') {
+                if (vibe.touchType === 'tap') triggerHaptic(Array(vibe.count || 1).fill(100));
+                if (vibe.touchType === 'hold') triggerHaptic(vibe.duration || 500);
+                if (vibe.touchType === 'pattern' && vibe.patternData) triggerHaptic(vibe.patternData);
+                sendNotification(vibe);
+            }
             break;
     }
   };
 
-  // --- NOTIFICATION HANDLER ---
+  const addChatMessage = (id: string, senderId: string, text: string, type: 'user' | 'system', timestamp: number) => {
+      setChatMessages(prev => [...prev, { id, senderId, text, timestamp, type }]);
+      if (!isChatOpenRef.current) {
+          setUnreadChatCount(prev => prev + 1);
+      }
+  };
+
+  const handleToggleChat = (open: boolean) => {
+      setIsChatOpen(open);
+      if (open) setUnreadChatCount(0);
+  };
+
   const sendNotification = (vibe: VibeSignal) => {
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-         const ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Cpath d='m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E";
-         let body = "Sent a vibe";
-         
-         if (vibe.action === 'invite') body = `Invited you to ${vibe.category}`;
-         else if (vibe.category === 'touch' && vibe.touchType === 'tap') body = "Thinking of you";
-         else if (vibe.category === 'touch' && vibe.touchType === 'hold') body = "Holding you";
-         else return;
-
-         navigator.serviceWorker.ready.then(reg => {
-             reg.showNotification(vibe.senderName, { body, icon: ICON, tag: 'vibe-msg' });
-         });
+         // Simple notification, non-intrusive
+         if (vibe.action === 'invite' || vibe.category === 'touch') {
+             const body = vibe.action === 'invite' ? `Invite: ${vibe.category}` : "Thinking of you";
+             navigator.serviceWorker.ready.then(reg => {
+                 reg.showNotification(vibe.senderName, { body, tag: 'vibe-msg' });
+             });
+         }
     }
   };
 
   const sendVibeToPartner = async (targetCode: string, vibe: VibeSignal) => {
     if (!ablyRef.current || !user) return;
     
-    // Encrypt if chat
     if (vibe.category === 'chat' && vibe.action === 'text' && vibe.payload) {
         vibe.payload = await encryptMessage(vibe.payload, user.pairCode, targetCode);
     }
+    // Local Feedback
+    if (vibe.category === 'touch' && vibe.action === 'data') triggerHaptic(50);
 
-    // Local Feedback for Touch
-    if (vibe.category === 'touch') triggerHaptic(50);
-
-    // SECURITY: Publish to HASHED channel
     const targetChannelName = await getChannelName(targetCode);
     const targetChannel = ablyRef.current.channels.get(targetChannelName);
-    
-    try {
-      await targetChannel.publish('vibration', vibe);
-    } catch (err) { console.error(err); }
+    try { await targetChannel.publish('vibration', vibe); } catch (err) { console.error(err); }
   };
 
-  // Helper for components to construct signals
-  const createAndSend = async (
-      type: VibeCategory, 
-      action: VibeAction, 
-      payload: Partial<VibeSignal>
-  ) => {
+  const createAndSend = async (type: VibeCategory, action: VibeAction, payload: Partial<VibeSignal>) => {
       if (!activeContact || !user) return;
-      
       const signal: VibeSignal = {
-          id: generateId(),
-          senderId: user.pairCode,
-          senderUniqueId: user.id,
-          senderName: user.displayName,
-          timestamp: Date.now(),
-          category: type,
-          action: action,
-          ...payload
+          id: generateId(), senderId: user.pairCode, senderUniqueId: user.id, senderName: user.displayName,
+          timestamp: Date.now(), category: type, action: action, ...payload
       } as VibeSignal;
-
       await sendVibeToPartner(activeContact.pairCode, signal);
   };
 
   const handleGlobalStop = () => {
       setIsGlobalHeartbeatActive(false);
       createAndSend('heartbeat', 'stop', {});
+  };
+
+  const handleSendMessage = (text: string) => {
+      if (!user) return;
+      createAndSend('chat', 'text', { payload: text });
+      addChatMessage(Date.now().toString(), user.pairCode, text, 'user', Date.now());
   };
 
   return (
@@ -332,15 +340,10 @@ const App: React.FC = () => {
           
           {screen === AppScreen.DASHBOARD && user && (
             <Dashboard 
-              user={user} 
-              contacts={contacts} 
-              status={connectionStatus}
-              onlineContacts={onlineContacts}
+              user={user} contacts={contacts} status={connectionStatus} onlineContacts={onlineContacts}
               onAdd={() => setScreen(AppScreen.PAIRING)}
               onContactClick={(c) => { setActiveContact(c); setScreen(AppScreen.VIBING); }}
-              onDeleteContact={deleteContact}
-              onResetApp={resetApp}
-              onUpdateUser={handleUpdateUser}
+              onDeleteContact={deleteContact} onResetApp={resetApp} onUpdateUser={handleUpdateUser}
             />
           )}
 
@@ -353,57 +356,30 @@ const App: React.FC = () => {
               onBack={() => setScreen(AppScreen.DASHBOARD)}
               incomingVibe={incomingVibe}
               onSendVibe={createAndSend}
-              onOpenChat={() => setScreen(AppScreen.CHAT)}
               customPatterns={customPatterns}
               onSavePattern={saveCustomPattern}
               onDeletePattern={deleteCustomPattern}
-            />
-          )}
-
-          {screen === AppScreen.CHAT && activeContact && user && (
-            <ChatScreen 
-              contact={activeContact} 
-              user={user} 
-              onBack={() => setScreen(AppScreen.VIBING)} 
-              onSendMessage={(txt) => createAndSend('chat', 'text', { payload: txt })} 
-              incomingMessage={incomingChatMessage}
-              onDeleteHistory={() => createAndSend('chat', 'clear', {})}
+              
+              // Chat Props
+              chatMessages={chatMessages}
+              isChatOpen={isChatOpen}
+              unreadCount={unreadChatCount}
+              onToggleChat={handleToggleChat}
+              onSendMessage={handleSendMessage}
+              onClearChat={() => { setChatMessages([]); createAndSend('chat', 'clear', {}); }}
             />
           )}
       </div>
 
       {isGlobalHeartbeatActive && (
           <div className="fixed bottom-24 inset-x-0 flex justify-center z-[1000] pointer-events-auto">
-              <button 
-                onClick={handleGlobalStop}
-                className="bg-rose-500 text-white px-8 py-4 rounded-full font-bold shadow-[0_0_30px_rgba(244,63,94,0.6)] animate-pulse flex items-center gap-3 active:scale-95 transition-transform"
-              >
-                  <Activity className="animate-bounce" />
-                  <span>STOP PULSE</span>
+              <button onClick={handleGlobalStop} className="bg-rose-500 text-white px-8 py-4 rounded-full font-bold shadow-[0_0_30px_rgba(244,63,94,0.6)] animate-pulse flex items-center gap-3 active:scale-95 transition-transform">
+                  <Activity className="animate-bounce" /> <span>STOP PULSE</span>
               </button>
           </div>
       )}
-
-      {/* NON-BLOCKING RIBBON UI */}
-      {activeInvite && (
-          <VibeRibbon 
-             invite={activeInvite} 
-             contact={contacts.find(c => c.pairCode === activeInvite.senderId)}
-             onAccept={() => {
-                 const contact = contacts.find(c => c.pairCode === activeInvite.senderId);
-                 if (contact) {
-                     setActiveContact(contact);
-                     setScreen(AppScreen.VIBING);
-                     // Note: VibingScreen will check incomingVibe and switch mode automatically
-                     setIncomingVibe(activeInvite); 
-                 }
-                 setActiveInvite(null);
-             }}
-             onDismiss={() => setActiveInvite(null)}
-          />
-      )}
       
-       <div className="w-full h-safe-bottom shrink-0 bg-transparent pointer-events-none" />
+      <div className="w-full h-safe-bottom shrink-0 bg-transparent pointer-events-none" />
     </div>
   );
 };
