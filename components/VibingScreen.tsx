@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Contact, UserProfile, VibeCategory, VibeAction, VibePattern, VibeSignal, ChatMessage } from '../types';
-import { ChevronLeft, Heart, Plus, X, CircleDot, Activity, PenTool, Wind, Grid3X3, Play, Pause, Square, MessageCircle, LayoutGrid } from 'lucide-react';
+import { ChevronLeft, Heart, Plus, X, CircleDot, Activity, PenTool, Wind, Grid3X3, Play, Pause, Square, MessageCircle, LayoutGrid, Info, Check, AlertCircle, Save } from 'lucide-react';
 import { triggerHaptic, generateId } from '../constants';
 import ChatDrawer from './ChatScreen'; 
 import TicTacToe from './TicTacToe';
@@ -34,7 +34,14 @@ const VibingScreen: React.FC<Props> = ({
   const [isPressing, setIsPressing] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const [status, setStatus] = useState<'idle' | 'holding' | 'tapped' | 'recording' | 'sending'>('idle');
+  
+  // Recorder & Whisper State
   const [showRecorder, setShowRecorder] = useState(false);
+  const [recorderWhisper, setRecorderWhisper] = useState('');
+  const [activeWhisper, setActiveWhisper] = useState<string | null>(null);
+  
+  // Info Modal
+  const [showInfo, setShowInfo] = useState(false);
   
   // Heartbeat State
   const [isHeartbeatActive, setIsHeartbeatActive] = useState(false);
@@ -68,7 +75,12 @@ const VibingScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!incomingVibe) return;
 
-    if (incomingVibe.category === 'breathe') {
+    if (incomingVibe.category === 'touch' && incomingVibe.action === 'data') {
+        if (incomingVibe.whisperText) {
+            setActiveWhisper(incomingVibe.whisperText);
+            setTimeout(() => setActiveWhisper(null), 4000);
+        }
+    } else if (incomingVibe.category === 'breathe') {
         if (mode === 'breathe' || incomingVibe.action === 'invite') {
              if (mode !== 'breathe') setMode('breathe');
              if (incomingVibe.variant) setBreatheVariant(incomingVibe.variant);
@@ -173,8 +185,14 @@ const VibingScreen: React.FC<Props> = ({
   };
 
   const toggleBreathe = () => {
-    if (isBreatheActive) { onSendVibe('breathe', 'stop', {}); setIsBreatheActive(false); } 
-    else { onSendVibe('breathe', 'invite', { variant: breatheVariant }); setIsBreatheActive(true); }
+    // Independent control - toggle local state and send signal, but don't lock UI
+    if (isBreatheActive) { 
+        onSendVibe('breathe', 'stop', {}); 
+        setIsBreatheActive(false); 
+    } else { 
+        onSendVibe('breathe', 'invite', { variant: breatheVariant }); 
+        setIsBreatheActive(true); 
+    }
   };
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (status === 'recording' || status === 'sending') return;
@@ -230,12 +248,35 @@ const VibingScreen: React.FC<Props> = ({
     if (drumStartTime.current === 0) return; const duration = Date.now() - drumStartTime.current; drumStartTime.current = 0;
     const vibe = duration > 250 ? Math.min(duration, 3000) : 100; triggerHaptic(vibe); setRecordingData(prev => [...prev, vibe, 150]);
   };
+  
+  const saveRecording = () => {
+      if (recordingData.length > 0) { 
+          onSavePattern({ 
+              id: generateId(), 
+              name: 'Pattern', 
+              emoji: '✨', 
+              data: recordingData,
+              defaultMessage: recorderWhisper
+          }); 
+          
+          // If we have a whisper, we can immediately send it as a test or just save the pattern
+          // The prompt implies "send a whisper" so let's send it now? 
+          // Actually, slots are usually for saving. Let's send it immediately as well if they wish, 
+          // OR the pattern button will now carry this whisper.
+          // For now, we save it. The button render below handles sending the message.
+      }
+      setRecordingData([]); 
+      setRecorderWhisper('');
+      setShowRecorder(false); 
+      setStatus('idle');
+  };
+
   const renderPatternSlot = (index: number) => {
     const pattern = customPatterns[index];
     if (!pattern) return ( <button key={`slot-${index}`} onClick={() => { setShowRecorder(true); setStatus('recording'); }} className={`w-14 h-14 rounded-full border border-dashed border-white/20 hover:border-pink-300 flex items-center justify-center text-white/40 hover:text-pink-300 transition-all ${status === 'sending' || status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}><Plus size={18} /></button> );
     return (
       <div key={pattern.id} className={`relative group w-16 h-16 ${status === 'sending' || status === 'recording' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <button onClick={() => { setStatus('sending'); triggerHaptic(pattern.data); onSendVibe('touch', 'data', { touchType: 'pattern', patternData: pattern.data, patternEmoji: pattern.emoji, patternName: pattern.name }).finally(() => setStatus('idle')); }} className={`glass-button w-full h-full rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-90 overflow-hidden relative shadow-lg bg-white/5`}><span className="text-xl filter drop-shadow-md">{pattern.emoji}</span></button>
+        <button onClick={() => { setStatus('sending'); triggerHaptic(pattern.data); onSendVibe('touch', 'data', { touchType: 'pattern', patternData: pattern.data, patternEmoji: pattern.emoji, patternName: pattern.name, whisperText: pattern.defaultMessage }).finally(() => setStatus('idle')); }} className={`glass-button w-full h-full rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-90 overflow-hidden relative shadow-lg bg-white/5`}><span className="text-xl filter drop-shadow-md">{pattern.emoji}</span></button>
         <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete pattern?')) onDeletePattern(pattern.id); }} className="absolute -top-1 -right-1 w-5 h-5 bg-black rounded-full border border-white/20 flex items-center justify-center text-white/50 hover:text-red-400 z-10 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
       </div>
     );
@@ -247,6 +288,13 @@ const VibingScreen: React.FC<Props> = ({
       else if (newMode === 'breathe') onSendVibe('breathe', 'invite', {});
       else if (newMode === 'matrix') onSendVibe('matrix', 'invite', {});
       else if (newMode === 'game-ttt') onSendVibe('game-ttt', 'invite', {});
+  };
+
+  const closeRecorder = () => {
+    setShowRecorder(false);
+    setRecorderWhisper('');
+    setRecordingData([]);
+    setStatus('idle');
   };
 
   let content;
@@ -309,7 +357,31 @@ const VibingScreen: React.FC<Props> = ({
           <div className="flex-1 flex flex-col items-center justify-center animate-in slide-in-from-bottom duration-500 relative w-full h-full p-4">
                <button onClick={() => { setMode('default'); onSendVibe('matrix', 'reset', {}); }} className="absolute top-2 right-2 p-3 glass-button rounded-full text-white/60 hover:text-white z-10"><X size={24} /></button>
                {matrixState === 'briefing' ? ( <div className="text-center space-y-4"><h2 className="text-2xl font-outfit font-bold text-white">Telepathy</h2><button onClick={startMatrixGame} className="bg-cyan-100/90 text-cyan-900 py-3 px-8 rounded-full font-bold">Start</button></div>
-               ) : ( <div className="grid gap-2 w-full max-w-sm aspect-[3/5]" style={{ gridTemplateColumns: `repeat(3, 1fr)` }}>{Array.from({ length: 9 }).map((_, i) => (<button key={i} onClick={() => handleMatrixTileClick(i)} className={`rounded-3xl border border-white/10 ${myMatrixSelection === i ? 'bg-cyan-500' : 'bg-white/5'}`} />))}</div>)}
+               ) : ( 
+                 <div className="flex flex-col items-center gap-6">
+                    <div className="grid gap-2 w-full max-w-sm aspect-[3/5]" style={{ gridTemplateColumns: `repeat(3, 1fr)` }}>{Array.from({ length: 9 }).map((_, i) => (<button key={i} onClick={() => handleMatrixTileClick(i)} className={`rounded-3xl border border-white/10 ${myMatrixSelection === i ? 'bg-cyan-500' : 'bg-white/5'}`} />))}</div>
+                    {matrixState === 'result' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-20 animate-in zoom-in duration-300">
+                             <div className="text-center space-y-4 p-8 glass-panel rounded-[2rem]">
+                                {myMatrixSelection === partnerMatrixSelection ? (
+                                    <>
+                                        <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-2"><Check size={40} className="text-emerald-400" /></div>
+                                        <h3 className="text-3xl font-bold text-white">Connected</h3>
+                                        <p className="text-white/60">Your minds are synced.</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-2"><AlertCircle size={40} className="text-rose-400" /></div>
+                                        <h3 className="text-3xl font-bold text-white">Drifted</h3>
+                                        <p className="text-white/60">Try again to find alignment.</p>
+                                    </>
+                                )}
+                                <button onClick={startMatrixGame} className="bg-white text-black px-8 py-3 rounded-full font-bold mt-4">Play Again</button>
+                             </div>
+                        </div>
+                    )}
+                 </div>
+               )}
           </div>
       )
   } else if (mode === 'game-ttt') {
@@ -343,11 +415,18 @@ const VibingScreen: React.FC<Props> = ({
                        {isPressing && (
                            <span className="absolute -bottom-12 text-white/50 text-xs font-medium tracking-widest uppercase animate-pulse">Holding you close...</span>
                        )}
+                       {activeWhisper && (
+                           <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                               <span className="text-white font-outfit text-xl font-bold drop-shadow-md text-center px-4 animate-in zoom-in fade-in slide-in-from-bottom-4 duration-500 bg-black/30 backdrop-blur-sm py-2 rounded-xl border border-white/10">
+                                   {activeWhisper}
+                               </span>
+                           </div>
+                       )}
                   </div>
               </div>
               <div className="w-20 flex flex-col items-end justify-center gap-6 pr-3 z-20">{renderPatternSlot(3)}{renderPatternSlot(4)}{renderPatternSlot(5)}</div>
               
-              <div className="absolute bottom-8 inset-x-0 flex justify-center gap-4">
+              <div className="absolute bottom-4 inset-x-0 flex justify-center gap-4">
                   <button onClick={() => handleModeSwitch('heartbeat')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-rose-500/20 text-white/80"><Activity size={22} /></button>
                   <button onClick={() => handleModeSwitch('draw')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-fuchsia-500/20 text-white/80"><PenTool size={22} /></button>
                   <button onClick={() => handleModeSwitch('game-ttt')} className="w-14 h-14 glass-button rounded-full flex items-center justify-center hover:bg-cyan-500/20 text-white/80"><LayoutGrid size={22} /></button>
@@ -356,10 +435,31 @@ const VibingScreen: React.FC<Props> = ({
               </div>
               
               {showRecorder && (
-                  <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex flex-col p-8 items-center justify-center">
-                       <div onMouseDown={handleDrumStart} onMouseUp={handleDrumEnd} onTouchStart={handleDrumStart} onTouchEnd={handleDrumEnd} className="w-52 h-52 rounded-[4rem] glass-button flex items-center justify-center"><CircleDot size={80} className="text-white/40" /></div>
-                       <button onClick={() => { if (recordingData.length > 0) { onSavePattern({ id: generateId(), name: 'Pattern', emoji: '✨', data: recordingData }); setRecordingData([]); setShowRecorder(false); setStatus('idle'); }}} className="mt-8 py-4 px-12 bg-pink-600 text-white font-bold rounded-2xl">Save</button>
-                       <button onClick={() => setShowRecorder(false)} className="mt-4 text-white/50">Cancel</button>
+                  <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex flex-col p-8 items-center justify-center animate-in fade-in duration-300">
+                       <h3 className="text-white/80 font-outfit text-xl mb-8 font-semibold">Record a Secret Whisper</h3>
+                       
+                       <div onMouseDown={handleDrumStart} onMouseUp={handleDrumEnd} onTouchStart={handleDrumStart} onTouchEnd={handleDrumEnd} className="w-52 h-52 rounded-[4rem] glass-button flex items-center justify-center active:scale-95 transition-transform mb-8 shadow-2xl border-pink-500/30 bg-pink-500/10 cursor-pointer">
+                            <div className="flex flex-col items-center gap-2">
+                                <CircleDot size={60} className="text-pink-300" />
+                                <span className="text-[10px] uppercase tracking-widest text-pink-200/50">Tap Rhythm</span>
+                            </div>
+                       </div>
+                       
+                       <input 
+                            type="text" 
+                            placeholder="Whisper..." 
+                            value={recorderWhisper}
+                            onChange={(e) => setRecorderWhisper(e.target.value)}
+                            maxLength={20}
+                            className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center text-white placeholder-white/20 focus:outline-none focus:border-pink-500/50 w-full max-w-xs mb-8"
+                       />
+                       
+                       <div className="flex gap-4">
+                           <button onClick={closeRecorder} className="px-8 py-4 bg-white/5 rounded-2xl text-white/60 hover:text-white font-bold">Cancel</button>
+                           <button onClick={saveRecording} disabled={recordingData.length === 0} className="px-8 py-4 bg-gradient-to-r from-pink-600 to-rose-600 rounded-2xl text-white font-bold shadow-lg shadow-pink-900/40 disabled:opacity-50 flex items-center gap-2">
+                               <Save size={18} /> Save Whisper
+                           </button>
+                       </div>
                   </div>
               )}
           </div>
@@ -368,10 +468,17 @@ const VibingScreen: React.FC<Props> = ({
 
   return (
       <div className="flex-1 flex flex-col h-full w-full relative">
+          {/* Header Gap for Ads */}
+          <div className="w-full h-16 shrink-0" />
+          
           {/* Nav & Chat Button Overlay */}
-          <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none p-4">
-              <button onClick={onBack} className="p-4 glass-button rounded-full text-white/60 hover:text-white pointer-events-auto shadow-xl">
+          <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none p-4 flex justify-between items-start mt-4">
+              <button onClick={onBack} className="p-4 glass-button rounded-full text-white/60 hover:text-white pointer-events-auto shadow-xl backdrop-blur-xl">
                   <ChevronLeft size={24} />
+              </button>
+              
+              <button onClick={() => setShowInfo(true)} className="p-4 glass-button rounded-full text-white/60 hover:text-white pointer-events-auto shadow-xl backdrop-blur-xl">
+                  <Info size={24} />
               </button>
           </div>
 
@@ -382,7 +489,12 @@ const VibingScreen: React.FC<Props> = ({
           />
 
           {/* Main Vibe Content */}
-          {content}
+          <div className="flex-1 relative flex flex-col">
+            {content}
+          </div>
+          
+          {/* Footer Gap for Ads */}
+          <div className="w-full h-16 shrink-0" />
 
           {/* Chat Drawer Overlay */}
           <ChatDrawer 
@@ -394,6 +506,22 @@ const VibingScreen: React.FC<Props> = ({
               onSendMessage={onSendMessage}
               onClear={onClearChat}
           />
+          
+          {/* Info Modal */}
+          {showInfo && (
+              <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-xl flex items-center justify-center p-8 animate-in fade-in duration-300" onClick={() => setShowInfo(false)}>
+                  <div className="bg-zinc-900 border border-white/10 p-8 rounded-[2rem] max-w-sm space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                      <h3 className="text-xl font-outfit font-bold text-white">How to Vibe</h3>
+                      <ul className="space-y-3 text-sm text-zinc-400">
+                          <li className="flex gap-3"><Heart size={16} className="shrink-0 mt-0.5 text-rose-400" /> Tap the heart to send a touch. Hold to send warmth.</li>
+                          <li className="flex gap-3"><Plus size={16} className="shrink-0 mt-0.5 text-pink-400" /> Use the side slots to record custom rhythms and whispers.</li>
+                          <li className="flex gap-3"><Wind size={16} className="shrink-0 mt-0.5 text-sky-400" /> Breathe mode syncs your breath.</li>
+                          <li className="flex gap-3"><Grid3X3 size={16} className="shrink-0 mt-0.5 text-emerald-400" /> Telepathy checks if you're thinking alike.</li>
+                      </ul>
+                      <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold mt-4">Got it</button>
+                  </div>
+              </div>
+          )}
       </div>
   );
 };

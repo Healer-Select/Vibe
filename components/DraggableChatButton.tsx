@@ -10,7 +10,9 @@ interface Props {
 
 const DraggableChatButton: React.FC<Props> = ({ onClick, unreadCount, isOpen }) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x: window.innerWidth - 80, y: 80 });
+  // Default to bottom right safe area for mobile visibility
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isInitialized, setIsInitialized] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
   // Refs for drag calculation
@@ -19,25 +21,31 @@ const DraggableChatButton: React.FC<Props> = ({ onClick, unreadCount, isOpen }) 
   const hasMovedRef = useRef(false);
 
   useEffect(() => {
-    // Load persisted position
+    // Determine safe initial position (Bottom Right)
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const defaultX = screenW - 80;
+    const defaultY = screenH - 100; // Above footer ad gap
+
     const savedPos = localStorage.getItem('vibe_chat_pos');
     if (savedPos) {
       try {
         const parsed = JSON.parse(savedPos);
-        // Basic bounds check
-        const safeX = Math.min(Math.max(0, parsed.x), window.innerWidth - 60);
-        const safeY = Math.min(Math.max(0, parsed.y), window.innerHeight - 60);
+        const safeX = Math.min(Math.max(0, parsed.x), screenW - 60);
+        const safeY = Math.min(Math.max(0, parsed.y), screenH - 60);
         setPosition({ x: safeX, y: safeY });
-      } catch (e) {}
+      } catch (e) {
+        setPosition({ x: defaultX, y: defaultY });
+      }
+    } else {
+        setPosition({ x: defaultX, y: defaultY });
     }
+    setIsInitialized(true);
   }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Only drag with primary button
     if (e.button !== 0) return;
-    
     (e.target as Element).setPointerCapture(e.pointerId);
-    
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     initialPosRef.current = { ...position };
     setIsDragging(true);
@@ -46,7 +54,6 @@ const DraggableChatButton: React.FC<Props> = ({ onClick, unreadCount, isOpen }) 
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
-
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
 
@@ -67,15 +74,12 @@ const DraggableChatButton: React.FC<Props> = ({ onClick, unreadCount, isOpen }) 
 
     if (!hasMovedRef.current) {
       onClick();
-      // Snap back to initial if it was just a tap
       setPosition(initialPosRef.current);
     } else {
-      // Snap logic
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
       const buttonSize = 64; 
       const margin = 16;
-
       let finalX = position.x;
       let finalY = position.y;
 
@@ -85,14 +89,14 @@ const DraggableChatButton: React.FC<Props> = ({ onClick, unreadCount, isOpen }) 
       } else {
         finalX = screenW - buttonSize - margin;
       }
-
-      // Clamp Y
       finalY = Math.max(margin, Math.min(finalY, screenH - buttonSize - margin));
 
       setPosition({ x: finalX, y: finalY });
       localStorage.setItem('vibe_chat_pos', JSON.stringify({ x: finalX, y: finalY }));
     }
   };
+  
+  if (!isInitialized) return null;
 
   return (
     <button

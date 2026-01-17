@@ -22,7 +22,8 @@ export interface TouchSignal extends BaseSignal {
   duration?: number; 
   patternName?: string; 
   patternEmoji?: string; 
-  patternData?: number[]; 
+  patternData?: number[];
+  whisperText?: string; // New: Text to display on heart
 }
 
 // 2. Chat Signals
